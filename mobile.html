@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Taleem Mobile Demo</title>
+<style>
+:root{--bg:#f1f4f9;--card:#fff;--ink:#16243d;--mute:#6a7891;--line:#e1e7f0;--brand:#1b5fb5;--brand2:#e6f0fc;--warn:#b86e00;--warn2:#fff3dc;--bad:#c0392b;--bad2:#fdeaea;--ok:#1e8a4c;--ok2:#e5f6ec;--adv:#7a4fd0;--adv2:#f0eafb}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1420;--card:#16202f;--ink:#e6edf8;--mute:#8fa1bd;--line:#26344a;--brand:#4b94ee;--brand2:#12263f;--warn:#f0a63a;--warn2:#33291a;--bad:#ef6f61;--bad2:#3a1d1a;--ok:#4fc283;--ok2:#14301f;--adv:#b39bf3;--adv2:#241d3d}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;align-items:center;min-height:100vh}
+button,input,select,textarea{font:inherit;color:inherit}
+input,select,textarea{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;width:100%}
+textarea{resize:none;min-height:64px}
+.demo{padding:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.demo select{width:auto}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)}
+.seg button{border:0;background:transparent;padding:6px 12px;cursor:pointer}
+.seg button.on{background:var(--brand);color:#fff}.seg.adv button.on{background:var(--adv)}
+.phone{width:390px;height:790px;background:var(--bg);border:10px solid #1b2433;border-radius:38px;overflow:hidden;position:relative;display:flex;flex-direction:column;box-shadow:0 14px 40px rgba(0,0,0,.25)}
+@media(max-width:480px){.phone{width:100%;height:calc(100vh - 100px);border:0;border-radius:0;box-shadow:none}}
+.top{background:var(--brand);color:#fff;padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.top.adv{background:var(--adv)}
+.top .s{font-size:12px;opacity:.85}.top .t{font-size:18px;font-weight:700}
+.top select{background:rgba(255,255,255,.2);border:0;color:#fff;border-radius:8px;padding:4px 8px;width:auto}
+.top select option{color:#000}
+.top button{background:rgba(255,255,255,.2);border:0;color:#fff;border-radius:8px;padding:5px 10px;cursor:pointer}
+.body{flex:1;overflow:auto;padding:12px}
+nav{display:flex;border-top:1px solid var(--line);background:var(--card)}
+nav button{flex:1;border:0;background:none;padding:8px 0 10px;color:var(--mute);font-size:11px;cursor:pointer;position:relative}
+nav button .i{display:block;font-size:20px}
+nav button.on{color:var(--brand);font-weight:600}
+nav .dot{position:absolute;top:3px;left:55%;background:var(--bad);color:#fff;border-radius:99px;font-size:10px;padding:0 5px;font-weight:700}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
+.card h3{margin:0 0 8px;font-size:12px;color:var(--mute);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between}
+.kp{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}.kp .card{margin:0}
+.kp .v{font-size:19px;font-weight:800}.kp .l{font-size:11px;color:var(--mute)}
+.hero{background:linear-gradient(135deg,var(--brand),#2f7ee0);color:#fff;border:0}
+.hero .big{font-size:30px;font-weight:800}.hero .l{opacity:.85;font-size:12px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}
+.small{font-size:12px}.muted{color:var(--mute)}.up{color:var(--ok)}.dn{color:var(--bad)}
+.badge{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap}
+.b-ok{background:var(--ok2);color:var(--ok)}.b-warn{background:var(--warn2);color:var(--warn)}.b-bad{background:var(--bad2);color:var(--bad)}.b-adv{background:var(--adv2);color:var(--adv)}.b-in{background:var(--brand2);color:var(--brand)}
+.btn{border:1px solid var(--line);background:var(--card);padding:7px 14px;border-radius:10px;cursor:pointer}
+.btn.p{background:var(--brand);color:#fff;border-color:var(--brand)}.btn.a{background:var(--adv);color:#fff;border-color:var(--adv)}.btn.g{background:#1f9d55;color:#fff;border-color:#1f9d55}.btn.d{background:var(--bad);color:#fff;border-color:var(--bad)}
+.btn.sm{padding:3px 10px;font-size:12px}.btn.w{width:100%;padding:12px;font-weight:600}
+.btn[disabled]{opacity:.5}
+.chips{display:flex;gap:6px;margin:0 0 10px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--card);padding:4px 12px;border-radius:99px;font-size:12px;cursor:pointer}
+.chip.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.bars{display:flex;align-items:flex-end;gap:6px;height:90px}.bars div{flex:1;text-align:center;font-size:10px;color:var(--mute)}.bars i{display:block;background:var(--brand);border-radius:4px 4px 0 0;margin-bottom:3px;opacity:.88}
+.bar{height:8px;background:var(--line);border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;background:var(--brand)}
+.sheet{position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;z-index:5}
+.sheet .box{background:var(--card);width:100%;border-radius:20px 20px 0 0;padding:18px;max-height:88%;overflow:auto}
+.toast{position:absolute;bottom:76px;left:16px;right:16px;background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:12px;text-align:center;z-index:9}
+.f{margin-bottom:10px}.f label{display:block;font-size:12px;color:var(--mute);margin-bottom:3px}
+.wa{background:#dcf8c6;color:#0b2d17;border-radius:10px;padding:8px 11px;font-size:13px;max-width:88%;box-shadow:0 1px 1px rgba(0,0,0,.12);white-space:pre-wrap;margin-bottom:8px}
+.wa small{display:block;text-align:right;color:#667;font-size:10px}
+@media(prefers-color-scheme:dark){.wa{background:#185c37;color:#e8fff0}}
+.chat{background:#e9e1d6;margin:-12px;padding:12px;min-height:100%}
+@media(prefers-color-scheme:dark){.chat{background:#0f1a17}}
+.lock{border:1px dashed var(--adv);background:var(--adv2);border-radius:14px;padding:22px;text-align:center}.lock b{color:var(--adv);font-size:16px}
+.rtl{direction:rtl}
+.rtl .row{flex-direction:row-reverse}
+.att{display:flex;gap:4px}.att button{width:34px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--card);font-weight:700;cursor:pointer}
+.att .P.on{background:var(--ok);color:#fff;border-color:var(--ok)}.att .A.on{background:var(--bad);color:#fff;border-color:var(--bad)}.att .L.on{background:var(--warn);color:#fff;border-color:var(--warn)}
+.pm{border:1.5px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.pm:hover{border-color:var(--brand)}
+.big-ic{font-size:44px;text-align:center}
+.note{background:var(--warn2);color:var(--warn);border-radius:10px;padding:8px 10px;font-size:12px;margin-bottom:10px}
+.hint{font-size:12px;color:var(--mute);text-align:center;padding:0 12px 12px;max-width:430px}
+</style>
+</head>
+<body>
+<div class="demo">
+  <select id="role" onchange="setRole(this.value)">
+    <option value="owner">👔 Owner / Principal</option>
+    <option value="teacher">👩‍🏫 Teacher</option>
+    <option value="parent">👨‍👧 Parent</option>
+    <option value="guard">💂 Gate guard</option>
+    <option value="driver">🚌 Van driver</option>
+    <option value="vendor">📦 Vendor</option>
+  </select>
+  <div class="seg" id="tierseg"><button class="on" onclick="setTier('b')">Basic</button><button onclick="setTier('a')">Advanced I</button></div>
+</div>
+<div class="phone" id="phone">
+  <div class="top" id="top"></div>
+  <div class="body" id="body"></div>
+  <nav id="nav"></nav>
+  <div id="over"></div>
+</div>
+<div class="hint" id="hint"></div>
+<script>
+const $=s=>document.querySelector(s);
+const R=n=>'Rs '+Math.round(n).toLocaleString('en-US');
+const TODAY='Mon, 12 Oct 2026';
+const EN={home:'Home',fees:'Fees',diary:'Diary',results:'Results',chat:'WhatsApp',present:'Present',absent:'Absent',notmarked:'Not marked yet',due:'Fee due',paynow:'Pay now',homework:'Homework',notices:'Notices',total:'Total',leave:'Apply for leave',pickup:'Authorised pickup',hello:'Assalam o Alaikum',paid:'Paid',report:'Report card',bus:'Van status',todayatt:'Today\'s attendance',cls:'Class',allpaid:'All fees paid ✓',pending:'Pending'};
+const UR={home:'ہوم',fees:'فیس',diary:'ڈائری',results:'نتیجہ',chat:'واٹس ایپ',present:'حاضر',absent:'غیر حاضر',notmarked:'ابھی درج نہیں',due:'واجب الادا فیس',paynow:'ابھی ادا کریں',homework:'ہوم ورک',notices:'اطلاعات',total:'کل',leave:'چھٹی کی درخواست',pickup:'لینے کے مجاز افراد',hello:'السلام علیکم',paid:'ادا شدہ',report:'رپورٹ کارڈ',bus:'وین کی صورتحال',todayatt:'آج کی حاضری',cls:'کلاس',allpaid:'تمام فیس ادا ✓',pending:'زیر التواء'};
+const t=k=>M.lang=='ur'?UR[k]||EN[k]:EN[k]||k;
+const NAMES6=['Hira Awan','Ali Raza','Sana Malik','Usman Butt','Zainab Khan','Bilal Sheikh','Maryam Qureshi','Omar Mirza'];
+const M={role:'owner',tier:'b',lang:'en',tab:{},child:0,sheet:null,
+  tatt:Object.fromEntries(NAMES6.map(n=>[n,'P'])),attSub:false,att:{},gone:{},
+  owed:[14200,5220],
+  msgs:[{m:'Assalam o Alaikum Awan sahib, Hira ki fee Rs 14,200 pending hai. Pay via app, 1Bill or at school.\n– Al-Noor Grammar School',tm:'Yesterday 09:30'},{m:'📢 Parent-Teacher Meeting on Saturday 17 Oct, 9am–1pm. Please attend.',tm:'Yesterday 12:10'}],
+  hw:[{c:0,s:'Math',t:'Exercise 4.2 (Q1-8)',due:'Tomorrow',by:'Mr. Khalid',done:false},{c:0,s:'Urdu',t:'Essay: میرا پسندیدہ شاعر',due:'Wed',by:'Ms. Nazia',done:true},{c:1,s:'English',t:'Write 5 lines about your pet',due:'Tomorrow',by:'Ms. Hina',done:false}],
+  appr:[{id:1,t:'Fee concession – Hira Awan (6)',d:'50% for 3 months · Accounts'},{id:2,t:'Expense – generator diesel',d:'Rs 15,000 · Admin'},{id:3,t:'Leave – Ms. Rabia Noor',d:'2 days · substitute assigned'}],
+  stops:[{n:'Hamza Awan',a:'Block C, Model Town',s:'wait'},{n:'Ali Raza',a:'Sector F, Model Town',s:'wait'},{n:'Sana Malik',a:'Link Rd',s:'wait'},{n:'Omar Mirza',a:'Block A',s:'wait'}],
+  visitors:[{n:'Mr. Salman Ahmed',p:'Meet principal',t:'08:42',out:null},{n:'Zubair (Stationery Co.)',p:'Delivery',t:'09:10',out:'09:35'}],
+  pos:[{id:'PO-119',i:'Winter blazers x40',v:112000,s:'Sent'},{id:'PO-120',i:'Class 3 books x30',v:54000,s:'Sent'}],
+  inv:[{id:'INV-77',v:38500,s:'Paid',n:'Paid 8 Oct'},{id:'INV-81',v:112000,s:'Approved',n:'Pays 20 Oct'}],
+  marks:[],
+  gp:0};
+const TABS={
+ owner:[['today','🏠','Today'],['fees','💰','Fees'],['appr','✅','Approve'],['staff','👩‍🏫','Staff']],
+ teacher:[['today','🏠','Today'],['att','✅','Attendance'],['diary','📚','Diary'],['marks','📝','Marks']],
+ parent:[['home','🏠','home'],['fees','💰','fees'],['diary','📚','diary'],['res','📝','results'],['chat','💬','chat']],
+ guard:[['pick','🚪','Pickup'],['vis','📒','Visitors'],['late','⏰','Late']],
+ driver:[['route','🚌','Route'],['sum','📊','Summary']],
+ vendor:[['ord','📦','Orders'],['pay','💳','Payments']]};
+const TITLE={owner:['Good morning','Principal · Al-Noor Grammar'],teacher:['Ms. Saima Iqbal','Class teacher · 6-A'],parent:['Awan family','Al-Noor Grammar School'],guard:['Main Gate','Abdul Ghaffar'],driver:['Route 2 – Model Town','Driver · Rafiq'],vendor:['Ghazali Stationers','Vendor portal']};
+const HINT={owner:'Owner: money, attendance, approvals and staff on one screen.',teacher:'Teacher: mark attendance, post homework and enter marks. Try marking Hira absent, then switch to Parent.',parent:'Parent: fees, attendance, homework, results and WhatsApp. Works in Urdu (tap اردو).',guard:'Guard: verify who collects a child; no fee data is visible. Release Hira, then check Parent.',driver:'Driver: pick-up and drop-off marks notify parents (Advanced I).',vendor:'Vendor: orders, delivery and payment status without needing an account manager.'};
+const toast=m=>{const e=document.createElement('div');e.className='toast';e.textContent=m;$('#phone').appendChild(e);setTimeout(()=>e.remove(),2400)};
+const sheet=h=>{M.sheet=h;drawSheet()};
+const drawSheet=()=>{$('#over').innerHTML=M.sheet?`<div class="sheet" onclick="if(event.target===this){M.sheet=null;drawSheet()}"><div class="box">${M.sheet}</div></div>`:''};
+const closeSheet=()=>{M.sheet=null;drawSheet()};
+const lock=(a,b)=>`<div class="lock"><b>🔒 ${a}</b><p class="muted">${b}</p><button class="btn a" onclick="setTier('a')">Preview Advanced I</button></div>`;
+const push=(m,tm)=>M.msgs.push({m,tm:tm||'Just now'});
+function setTier(x){M.tier=x;document.querySelectorAll('#tierseg button').forEach((b,i)=>b.classList.toggle('on',(i==0)==(x=='b')));$('#tierseg').classList.toggle('adv',x=='a');render()}
+function setRole(r){M.role=r;$('#role').value=r;render()}
+function setTab(k){M.tab[M.role]=k;render()}
+function render(){
+  const r=M.role,tabs=TABS[r],cur=M.tab[r]||tabs[0][0],ti=TITLE[r];
+  $('#top').className='top'+(M.tier=='a'?' adv':'');
+  $('#top').innerHTML=`<div><div class="s">${r=='parent'?t('hello'):'Taleem'}</div><div class="t">${ti[0]}</div><div class="s">${ti[1]}</div></div>`+(r=='parent'?`<div style="text-align:right"><button onclick="M.lang=M.lang=='ur'?'en':'ur';render()">${M.lang=='ur'?'English':'اردو'}</button><br><select style="margin-top:6px" onchange="M.child=+this.value;render()"><option value="0" ${M.child==0?'selected':''}>Hira · ${t('cls')} 6</option><option value="1" ${M.child==1?'selected':''}>Hamza · ${t('cls')} 3</option></select></div>`:`<div class="s">${TODAY.slice(0,10)}</div>`);
+  $('#nav').innerHTML=tabs.map(([k,i,l])=>`<button class="${cur==k?'on':''}" onclick="setTab('${k}')"><span class="i">${i}</span>${r=='parent'?t(l=='res'?'results':l):l}${r=='owner'&&k=='appr'&&M.appr.length?`<span class="dot">${M.appr.length}</span>`:''}</button>`).join('');
+  $('#body').className='body'+(r=='parent'&&M.lang=='ur'?' rtl':'');
+  $('#body').innerHTML=V[r][cur]();$('#hint').textContent=HINT[r];
+  drawSheet();
+}
+const V={owner:{},teacher:{},parent:{},guard:{},driver:{},vendor:{}};
+
+// ================= OWNER =================
+V.owner.today=()=>{const cls=['Nur','Prep','1','2','3','4','5','6','7','8','9','10'],v=[94,92,96,90,95,91,93,88,92,89,94,90];
+  return `<div class="card hero"><div class="l">Collected today</div><div class="big">Rs 184,500</div><div class="l">▲ 12% vs last Monday · 41 receipts</div></div>
+  <div class="kp"><div class="card"><div class="l">October collected</div><div class="v">Rs 2.6M</div><div class="bar" style="margin-top:6px"><i style="width:76%"></i></div><div class="l">76% of target</div></div>
+  <div class="card"><div class="l">Outstanding</div><div class="v dn">Rs 310K</div><div class="l">38 students</div></div>
+  <div class="card"><div class="l">Attendance</div><div class="v">${M.attSub&&Object.values(M.tatt).includes('A')?'91%':'92%'}</div><div class="l">${M.attSub?'parents notified ✓':'6 absent today'}</div></div>
+  <div class="card"><div class="l">Staff present</div><div class="v">11 / 12</div><div class="l">1 on approved leave</div></div></div>
+  <div class="card"><h3>Attendance by class %</h3><div class="bars">${v.map((x,i)=>`<div><i style="height:${(x-80)*5.5}px;${x<90?'background:var(--warn)':''}"></i>${cls[i]}</div>`).join('')}</div></div>
+  <div class="card"><h3>Alerts</h3><div class="row small"><span>⏰ Vouchers due on the 15th</span><span class="badge b-warn">3 days</span></div><div class="row small"><span>🚪 2 visitors on campus</span><span class="badge b-in">Gate</span></div><div class="row small"><span>📦 Registers running low</span><span class="badge b-warn">Reorder</span></div></div>
+  ${M.tier=='a'?`<div class="card"><h3>Campuses</h3>${[['Main',92,'Rs 2.6M'],['Johar Town',89,'Rs 1.6M'],['Model Town',94,'Rs 1.2M']].map(c=>`<div class="row small"><span>${c[0]}</span><span>${c[1]}%</span><b>${c[2]}</b></div>`).join('')}</div>`:''}`};
+V.owner.fees=()=>{const d=[['Aliya Butt','6-B',3,21700],['Hamid Raza','9-A',3,26900],['Noor Awan','4-A',2,12900],['Fahad Gill','1-B',2,10900],['Iqra Mirza','8-A',2,16000]];
+  return `<div class="card"><h3>How parents paid this month</h3>${[['Cash',46],['Bank',24],['JazzCash',14],['Easypaisa',9],['1Bill',7]].map(x=>`<div class="row small"><span style="width:80px">${x[0]}</span><div class="bar" style="flex:1"><i style="width:${x[1]*2}%"></i></div><b>${x[1]}%</b></div>`).join('')}</div>
+  <div class="card"><h3>Top defaulters <span class="badge b-bad">38</span></h3>${d.map(x=>`<div class="row"><div><b>${x[0]}</b><div class="small muted">Class ${x[1]} · ${x[2]} months</div></div><div style="text-align:right"><b>${R(x[3])}</b><br><button class="btn sm g" onclick="toast('WhatsApp reminder sent')">Remind</button></div></div>`).join('')}
+  <br><button class="btn w g" onclick="toast('Reminder sent to 38 parents on WhatsApp')">Remind all 38 on WhatsApp</button></div>
+  ${M.tier=='b'?'<div class="note">Advanced I: reminders repeat automatically every 5 days and fall back to SMS.</div>':''}`};
+V.owner.appr=()=>`<div class="card"><h3>Waiting for you</h3>${M.appr.length?M.appr.map(a=>`<div class="row"><div><b class="small">${a.t}</b><div class="small muted">${a.d}</div></div><div style="display:flex;gap:6px"><button class="btn sm p" onclick="apr(${a.id},1)">✓</button><button class="btn sm" onclick="apr(${a.id},0)">✗</button></div></div>`).join(''):'<div class="muted" style="text-align:center;padding:20px">All clear 🎉</div>'}</div>`;
+function apr(id,y){M.appr=M.appr.filter(a=>a.id!=id);toast(y?'Approved ✓':'Declined');render()}
+V.owner.staff=()=>`<div class="kp"><div class="card"><div class="l">Present</div><div class="v up">11</div></div><div class="card"><div class="l">On leave</div><div class="v">1</div></div></div>
+  <div class="card"><h3>Payroll – Oct</h3><div class="row"><span>Net payable</span><b>Rs 468,000</b></div><div class="row"><span>Advances recovered</span><b>Rs 18,000</b></div><div class="row"><span>Due date</span><b>28 Oct</b></div></div>
+  <div class="card"><h3>Leave</h3><div class="row small"><span>Ms. Rabia Noor · 2 days</span><span class="badge b-ok">Approved</span></div>${M.tier=='a'?'<div class="row small"><span>Class 7 cover: Ms. Hina (period 3)</span><span class="badge b-adv">Auto-suggested</span></div>':''}</div>`;
+
+// ================= TEACHER =================
+V.teacher.today=()=>{const pend=!M.attSub;return `<div class="card"><h3>Today's tasks</h3>
+  <div class="row"><div><b>Mark attendance · 6-A</b><div class="small muted">Due by 9:00 am</div></div>${pend?'<button class="btn sm p" onclick="setTab(\'att\')">Mark</button>':'<span class="badge b-ok">Done ✓</span>'}</div>
+  <div class="row"><div><b>Post homework · Math 6-A</b></div><button class="btn sm" onclick="setTab('diary')">Post</button></div></div>
+  <div class="card"><h3>Timetable</h3>${[['8:00','Class 6-A','English'],['9:00','Class 7-B','English'],['10:20','Class 6-A','English'],['11:30','Free','—'],['12:30','Class 5-A','English']].map(r=>`<div class="row small"><b>${r[0]}</b><span>${r[1]}</span><span class="muted">${r[2]}</span></div>`).join('')}</div>
+  <div class="card"><h3>Notices</h3><div class="small">📢 PTM on Saturday 17 Oct. Please prepare progress notes.</div></div>`};
+V.teacher.att=()=>{const ab=Object.values(M.tatt).filter(x=>x=='A').length;
+  return `<div class="card"><h3>Class 6-A · ${NAMES6.length} students</h3>${NAMES6.map(n=>`<div class="row"><b>${n}</b><div class="att">${['P','A','L'].map(x=>`<button class="${x} ${M.tatt[n]==x?'on':''}" onclick="M.tatt['${n}']='${x}';M.attSub=false;render()">${x}</button>`).join('')}</div></div>`).join('')}
+  <br><button class="btn w g" onclick="attSubmit()">${M.attSub?'Submitted ✓ · tap to edit':`Submit · ${ab} absent`}</button></div>
+  <div class="small muted">Works offline in the classroom; syncs when the phone is back online.</div>`};
+function attSubmit(){const ab=NAMES6.filter(n=>M.tatt[n]=='A');
+  if(!ab.length){M.attSub=true;M.att={...M.tatt};toast('All present. Saved ✓');return render()}
+  sheet(`<h3 style="margin-top:0">Notify ${ab.length} parent${ab.length>1?'s':''}?</h3><div class="chat" style="margin:0 0 12px;border-radius:12px;min-height:0"><div class="wa">السلام علیکم! آپ کا بچہ ${ab[0]} (کلاس 6) آج ${TODAY} کو غیر حاضر ہے۔\n\nAssalam o Alaikum, ${ab[0]} (Class 6-A) is marked ABSENT today.\n– Al-Noor Grammar School<small>09:02 ✓✓</small></div></div><button class="btn w g" onclick="attGo()">Send WhatsApp to parent${ab.length>1?'s':''}</button>`)}
+function attGo(){M.attSub=true;M.att={...M.tatt};if(M.tatt['Hira Awan']=='A')push('السلام علیکم! آپ کا بچہ Hira Awan (کلاس 6) آج '+TODAY+' کو غیر حاضر ہے۔\n\nAssalam o Alaikum, Hira Awan (Class 6-A) is marked ABSENT today.\n– Al-Noor Grammar School','09:02');closeSheet();toast('Absence alerts delivered ✓✓');render()}
+V.teacher.diary=()=>`<div class="card"><h3>Post homework</h3><div class="f"><label>Class</label><select><option>6-A</option><option>7-B</option><option>5-A</option></select></div><div class="f"><label>Subject</label><select id="hs"><option>English</option><option>Math</option><option>Urdu</option></select></div>
+  <div class="f"><label>Details</label><textarea id="ht" placeholder="e.g. Read chapter 5 and answer Q1–4"></textarea></div><div class="f"><label>Due</label><select id="hd"><option>Tomorrow</option><option>Wed</option><option>Next week</option></select></div>
+  <button class="btn w p" onclick="hwPost()">Send to parents (app + WhatsApp)</button><div class="small muted" style="margin-top:6px">📷 You can attach a photo of the board or worksheet.</div></div>
+  <div class="card"><h3>Recently posted</h3>${M.hw.filter(h=>h.c==0).map(h=>`<div class="row small"><span><b>${h.s}</b> · ${h.t}</span><span class="badge b-ok">sent</span></div>`).join('')}</div>`;
+function hwPost(){const s=$('#hs').value,tx=$('#ht').value||'Read chapter 5 and answer Q1–4',d=$('#hd').value;M.hw.unshift({c:0,s,t:tx,due:d,by:'Ms. Saima',done:false});push('📚 Homework – Class 6-A\n'+s+': '+tx+'\nDue: '+d+'\n– Ms. Saima Iqbal','Just now');toast('Posted to 29 parents ✓');render()}
+V.teacher.marks=()=>{if(!M.marks.length)M.marks=NAMES6.map((n,i)=>40+i*6);
+  return `<div class="card"><h3>Mid-Term · English · out of 100</h3>${NAMES6.map((n,i)=>`<div class="row"><b>${n}</b><input type="number" style="width:76px" value="${M.marks[i]}" onchange="M.marks[${i}]=+this.value"></div>`).join('')}<br><button class="btn w p" onclick="toast('Marks saved. Grades and positions updated')">Save marks</button></div>`};
+
+// ================= PARENT =================
+const kid=()=>M.child==0?{n:'Hira Awan',c:'6-A'}:{n:'Hamza Awan',c:'3-B'};
+V.parent.home=()=>{const k=kid(),a=M.child==0?(M.attSub?M.att['Hira Awan']:null):'P',g=M.gone[k.n],o=M.owed[M.child];
+  return `<div class="card"><h3>${t('todayatt')}</h3><div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:17px">${k.n}</b><div class="small muted">${t('cls')} ${k.c}</div></div>
+   ${g?`<span class="badge b-in">Picked up ${g}</span>`:a=='P'?`<span class="badge b-ok">${t('present')}</span>`:a=='A'?`<span class="badge b-bad">${t('absent')}</span>`:a=='L'?'<span class="badge b-warn">Late</span>':`<span class="badge b-warn">${t('notmarked')}</span>`}</div></div>
+  <div class="card" style="${o?'border-color:var(--warn)':''}"><h3>${t('due')}</h3><div style="display:flex;justify-content:space-between;align-items:center"><div class="big-ic" style="font-size:26px;font-weight:800">${o?R(o):t('allpaid')}</div>${o?`<button class="btn p" onclick="setTab('fees')">${t('paynow')}</button>`:''}</div></div>
+  <div class="kp"><div class="card" onclick="setTab('diary')" style="cursor:pointer"><div class="l">${t('homework')}</div><div class="v">${M.hw.filter(h=>h.c==M.child&&!h.done).length} ${t('pending')}</div></div><div class="card" onclick="setTab('res')" style="cursor:pointer"><div class="l">${t('report')}</div><div class="v">${M.child?'A':'B+'}</div></div></div>
+  <div class="card"><h3>${t('notices')}</h3><div class="small">📢 PTM Saturday 17 Oct, 9am–1pm</div><div class="small" style="margin-top:6px">🏏 Sports day on 24 Oct</div></div>
+  <div class="card"><h3>Quick actions</h3><div class="chips"><span class="chip" onclick="leaveSheet()">📝 ${t('leave')}</span><span class="chip" onclick="pickSheet()">🚪 ${t('pickup')}</span><span class="chip" onclick="${M.tier=='a'?'busSheet()':"toast('Van tracking is in Advanced I')"}">🚌 ${t('bus')} ${M.tier=='a'?'':'🔒'}</span></div></div>`};
+function leaveSheet(){sheet(`<h3 style="margin-top:0">${t('leave')} · ${kid().n}</h3><div class="f"><label>Date</label><select><option>Tomorrow</option><option>2 days</option><option>This week</option></select></div><div class="f"><label>Reason</label><select><option>Fever / illness</option><option>Family function</option><option>Travel</option></select></div><button class="btn w p" onclick="closeSheet();toast('Sent to class teacher; marked excused')">Send</button>`)}
+function pickSheet(){sheet(`<h3 style="margin-top:0">${t('pickup')}</h3>${['Father · Imran Awan','Uncle · Tariq Awan','Van driver · Rafiq'].map(x=>`<div class="row"><span>${x}</span><span class="badge b-ok">authorised</span></div>`).join('')}<p class="small muted">Anyone else must be approved by you on WhatsApp with a one-time code before the gate releases your child.</p><button class="btn w" onclick="closeSheet();toast('Invite sent to add a person')">+ Add a person</button>`)}
+function busSheet(){sheet(`<h3 style="margin-top:0">${t('bus')}</h3><svg viewBox="0 0 240 120" style="width:100%;background:var(--brand2);border-radius:12px"><path d="M10 105 C60 90 80 50 130 55 S200 25 230 15" fill="none" stroke="var(--adv)" stroke-width="3" stroke-dasharray="6 4"/><circle cx="130" cy="55" r="7" fill="var(--adv)"/><circle cx="230" cy="15" r="6" fill="var(--ok)"/><text x="170" y="12" font-size="10" fill="currentColor">School</text></svg><p><b>Van 2 · LEB-7721</b><br><span class="muted">Driver Rafiq · ${M.stops[0].s=='picked'?'Hamza is on board ✓':'6 min from your stop'}</span></p>`)}
+V.parent.fees=()=>{const k=kid(),o=M.owed[M.child],L=M.child==0?[['Tuition – Oct',7000],['Arrears – Sep',7000],['Late fine',200]]:[['Tuition – Oct',5800],['Sibling discount',-580]];
+  if(!o)return `<div class="card" style="text-align:center"><div class="big-ic">✅</div><b>${t('allpaid')}</b><div class="small muted">${k.n}</div></div>`+recent();
+  return `<div class="card"><h3>${k.n} · ${t('due')}</h3>${L.map(l=>`<div class="row"><span>${l[0]}</span><b class="${l[1]<0?'up':''}">${l[1]<0?'−':''}${R(Math.abs(l[1]))}</b></div>`).join('')}<div class="row" style="font-size:17px"><b>${t('total')}</b><b>${R(o)}</b></div>
+  ${M.tier=='a'?`<br><button class="btn w p" onclick="paySheet()">${t('paynow')} · ${R(o)}</button>${M.owed[0]&&M.owed[1]?`<button class="btn w" style="margin-top:8px" onclick="paySheet(1)">Pay for both children · ${R(M.owed[0]+M.owed[1])}</button>`:''}`
+   :`<div class="note" style="margin-top:10px">Pay at any bank, via JazzCash / Easypaisa → 1Bill, or at school. The school marks it paid when received.</div><div class="row"><span>1Bill PSID</span><b>1001 2026 240${M.child+6}</b></div><button class="btn w" onclick="toast('PSID copied')">Copy PSID</button><button class="btn w" style="margin-top:8px" onclick="toast('Voucher PDF downloaded')">Download voucher</button><button class="btn w" style="margin-top:8px" onclick="toast('Slip sent to accounts; they will confirm on WhatsApp')">I have paid – upload slip</button>
+   <p class="small muted" style="text-align:center">Pay inside the app with JazzCash, Easypaisa or 1Bill <span class="badge b-adv">Advanced I</span></p>`}</div>`+recent()};
+const recent=()=>`<div class="card"><h3>Recent payments</h3>${(M.rcp||[]).map(r=>`<div class="row small"><span>${r}</span><span class="badge b-ok">${t('paid')}</span></div>`).join('')}<div class="row small"><span>Sep tuition · Cash · 3 Sep</span><span class="badge b-ok">${t('paid')}</span></div><div class="row small"><span>Aug tuition · 1Bill · 5 Aug</span><span class="badge b-ok">${t('paid')}</span></div></div>`;
+function paySheet(both){const amt=both?M.owed[0]+M.owed[1]:M.owed[M.child];
+  sheet(`<h3 style="margin-top:0">Pay ${R(amt)}</h3>${[['📱','JazzCash','Mobile account'],['💚','Easypaisa','Mobile account'],['🏦','1Bill','Any bank app'],['💳','Debit / credit card','Visa · Mastercard']].map(m=>`<div class="pm" onclick="payConfirm('${m[1]}',${both?1:0})"><span>${m[0]} <b>${m[1]}</b><div class="small muted">${m[2]}</div></span>›</div>`).join('')}`)}
+function payConfirm(m,both){sheet(`<div class="big-ic">📲</div><h3 style="text-align:center">Approve in ${m}</h3><p class="muted" style="text-align:center">A payment request was sent to 0300-1234567. Enter your PIN in the ${m} app.</p><button class="btn w g" onclick="payDone('${m}',${both})">I approved it (demo)</button>`)}
+function payDone(m,both){const a=both?M.owed[0]+M.owed[1]:M.owed[M.child];(M.rcp=M.rcp||[]).unshift(`Oct fee · ${m} · today`);
+  push(`✅ Payment received ${R(a)} via ${m}. Receipt RC-48311. JazzCash ref: JC${Math.floor(Math.random()*90000+10000)}.\nShukriya! – Al-Noor Grammar School`,'Just now');
+  if(both){M.owed=[0,0]}else M.owed[M.child]=0;closeSheet();toast('Payment successful ✓ Receipt on WhatsApp');render()}
+V.parent.diary=()=>{const L=M.hw.filter(h=>h.c==M.child);return `<div class="card"><h3>${t('homework')}</h3>${L.map((h,i)=>`<div class="row"><div><b>${h.s}</b> <span class="small muted">· ${h.by}</span><div class="small">${h.t}</div><div class="small muted">Due: ${h.due}</div></div><div style="text-align:center"><input type="checkbox" style="width:22px;height:22px" ${h.done?'checked':''} onchange="M.hw[M.hw.indexOf(M.hw.filter(x=>x.c==M.child)[${i}])].done=this.checked;render()"><div class="small muted">done</div></div></div>`).join('')||'<div class="muted">No homework</div>'}</div><div class="small muted">Every homework also arrives on WhatsApp, so parents who don't open the app still see it.</div>`};
+V.parent.res=()=>{const S6=[['English',78],['Urdu',85],['Math',91],['Science',74],['Islamiat',88],['Social St.',80]],S3=[['English',92],['Urdu',88],['Math',95],['Science',90],['Islamiat',94],['Art',97]],L=M.child?S3:S6,p=Math.round(L.reduce((a,b)=>a+b[1],0)/6);
+  return `<div class="card"><h3>Mid-Term 2026 · ${kid().n}</h3><div class="kp"><div class="card"><div class="l">${t('total')}</div><div class="v">${p}%</div></div><div class="card"><div class="l">Position</div><div class="v">${M.child?'2nd':'6th'} / 29</div></div></div>
+  ${L.map(x=>`<div class="row small"><span style="width:84px">${x[0]}</span><div class="bar" style="flex:1"><i style="width:${x[1]}%"></i></div><b>${x[1]}</b></div>`).join('')}<br><button class="btn w p" onclick="toast('Report card PDF downloaded')">⬇ ${t('report')}</button></div>`};
+V.parent.chat=()=>`<div class="chat"><div style="text-align:center;font-size:12px;color:var(--mute);margin-bottom:10px">Al-Noor Grammar School · Official · ✓</div>${M.msgs.map(m=>`<div class="wa">${m.m}${m.m.includes('pending')&&M.owed[0]?`<br><b style="color:#0a6">Pay now ›</b>`:''}<small>${m.tm} ✓✓</small></div>`).join('')}
+  <div class="small muted" style="text-align:center;margin-top:12px">Messages sent by the school appear here automatically.</div></div>`;
+
+// ================= GUARD =================
+const GK=['Hira Awan (6-A)','Hamza Awan (3-B)','Ali Raza (6-A)','Sana Malik (6-A)'];
+V.guard.pick=()=>{const n=GK[M.gp],f=n.startsWith('Hira')||n.startsWith('Ali')||n.startsWith('Sana')?'Father':'Father';
+  return `<div class="card"><h3>Scan student card</h3><select onchange="M.gp=+this.value;render()">${GK.map((x,i)=>`<option value="${i}" ${M.gp==i?'selected':''}>${x}</option>`).join('')}</select>
+  <div style="text-align:center;padding:14px"><div class="big-ic">${n.startsWith('Hamza')||n.startsWith('Ali')?'👦':'👧'}</div><b style="font-size:18px">${n.replace(/ \(.*/,'')}</b><div class="muted">Class ${n.match(/\((.*)\)/)[1]}</div></div>
+  <div class="f"><label>Who is collecting?</label>${[['Father',1],['Uncle (Tariq)',1],['Van driver Rafiq',1],['Someone not on the list',0]].map((p,i)=>`<label style="display:flex;gap:8px;padding:6px 0;color:var(--ink);font-size:14px"><input type="radio" name="pk" style="width:auto" ${i==0?'checked':''} value="${p[0]}|${p[1]}">${p[0]} ${p[1]?'<span class="badge b-ok">authorised</span>':'<span class="badge b-bad">not on list</span>'}</label>`).join('')}</div>
+  <button class="btn w p" onclick="pkGo()">Release child</button></div><div class="small muted">No fee or marks data is shown to the guard.</div>`};
+function pkGo(){const v=document.querySelector('input[name=pk]:checked').value.split('|'),n=GK[M.gp].replace(/ \(.*/,'');
+  if(v[1]=='0')return sheet(`<h3 style="margin-top:0">⚠ Not on the authorised list</h3><p>The parent has been asked on WhatsApp. Ask the visitor for the 4-digit code.</p><div class="f"><label>Code from parent</label><input value="4821" inputmode="numeric"></div><button class="btn w g" onclick="closeSheet();toast('Code verified. Child released; incident logged')">Verify code</button><button class="btn w d" style="margin-top:8px" onclick="closeSheet();toast('Release refused; principal alerted')">Parent said NO</button>`);
+  const tm=new Date().getHours()?'01:42 pm':'01:42 pm';M.gone[n]=tm+' by '+v[0].split(' ')[0];
+  if(n.startsWith('Hira')||n.startsWith('Hamza'))push(`✅ Pickup confirmed\n${n} left school at ${tm} with ${v[0]} (verified at gate by Abdul Ghaffar).`,tm);
+  toast(n+' released to '+v[0]+'. Parent notified ✓✓')}
+V.guard.vis=()=>`<div class="card"><h3>Check in</h3><div class="f"><input id="vn" placeholder="Visitor name"></div><div class="f"><select id="vp"><option>Meet principal</option><option>Fee query</option><option>Vendor delivery</option><option>Parent meeting</option></select></div><button class="btn w p" onclick="M.visitors.push({n:$('#vn').value||'Visitor',p:$('#vp').value,t:'11:2'+M.visitors.length,out:null});toast('Checked in; host notified');render()">Check in</button></div>
+  <div class="card"><h3>Today</h3>${M.visitors.map((v,i)=>`<div class="row"><div><b>${v.n}</b><div class="small muted">${v.p} · in ${v.t}</div></div>${v.out?`<span class="badge b-ok">out ${v.out}</span>`:`<button class="btn sm" onclick="M.visitors[${i}].out='11:50';render()">Check out</button>`}</div>`).join('')}</div>
+  <div class="card"><h3>Expected deliveries</h3><div class="row small"><span>Al-Fatah Uniforms · blazers (PO-119)</span><span class="badge b-warn">Today</span></div></div>`;
+V.guard.late=()=>`<div class="card"><h3>Late arrivals today</h3>${[['Bilal Sheikh','6-A','8:24'],['Ayesha Gill','2-B','8:31'],['Fahad Mirza','9-A','8:40']].map(x=>`<div class="row"><span><b>${x[0]}</b> <span class="small muted">${x[1]}</span></span><span class="badge b-warn">${x[2]}</span></div>`).join('')}<br><button class="btn w" onclick="toast('Late slip printed')">Issue late slip</button></div>`;
+
+// ================= DRIVER =================
+V.driver.route=()=>{if(M.tier=='b')return lock('Transport & driver app','Drivers mark pick-up and drop-off, parents see the van status and get a message when it is close. Included in Advanced I.');
+  const done=M.stops.filter(s=>s.s!='wait').length;
+  return `<div class="card"><h3>Morning run · ${done}/${M.stops.length} picked</h3><div class="bar"><i style="width:${done/M.stops.length*100}%"></i></div></div>
+  ${M.stops.map((s,i)=>`<div class="card"><div class="row" style="border:0;padding:0"><div><b>${i+1}. ${s.n}</b><div class="small muted">${s.a}</div></div>${s.s=='wait'?`<button class="btn sm a" onclick="pickUp(${i})">Picked up</button>`:'<span class="badge b-ok">On board ✓</span>'}</div></div>`).join('')}`};
+function pickUp(i){const s=M.stops[i];s.s='picked';if(s.n.startsWith('Hamza'))push(`🚌 Hamza Awan boarded Van 2 at 7:${12+i} am.`,'7:'+(12+i)+' am');toast(s.n+' marked on board; parent notified')}
+V.driver.sum=()=>M.tier=='b'?lock('Transport','Included in Advanced I.'):`<div class="kp"><div class="card"><div class="l">Students</div><div class="v">18</div></div><div class="card"><div class="l">On-time rate</div><div class="v up">96%</div></div></div><div class="card"><h3>Today</h3><div class="row small"><span>Morning</span><span class="badge b-in">in progress</span></div><div class="row small"><span>Afternoon</span><span class="badge b-warn">starts 1:30 pm</span></div></div>`;
+
+// ================= VENDOR =================
+V.vendor.ord=()=>M.tier=='b'?lock('Purchase orders','Vendors receive purchase orders on their phone, confirm, and mark delivery; the gate guard and store are notified. Included in Advanced I.'):
+  M.pos.map((p,i)=>`<div class="card"><div class="row" style="border:0;padding:0"><div><b>${p.id}</b><div class="small">${p.i}</div><div class="small muted">${R(p.v)}</div></div><span class="badge ${p.s=='Delivered'?'b-ok':p.s=='Confirmed'?'b-in':'b-warn'}">${p.s}</span></div>
+  ${p.s=='Sent'?`<br><button class="btn w a" onclick="M.pos[${i}].s='Confirmed';toast('Confirmed; school notified');render()">Confirm order</button>`:p.s=='Confirmed'?`<br><button class="btn w g" onclick="M.pos[${i}].s='Delivered';toast('Delivery logged at gate; store notified');render()">Mark delivered</button>`:''}</div>`).join('');
+V.vendor.pay=()=>`<div class="kp"><div class="card"><div class="l">Pending</div><div class="v">${R(M.inv.filter(x=>x.s!='Paid').reduce((a,b)=>a+b.v,0))}</div></div><div class="card"><div class="l">Paid (Oct)</div><div class="v up">${R(M.inv.filter(x=>x.s=='Paid').reduce((a,b)=>a+b.v,0))}</div></div></div>
+  <div class="card"><h3>Invoices</h3>${M.inv.map(x=>`<div class="row"><div><b>${x.id}</b><div class="small muted">${x.n}</div></div><div style="text-align:right"><b>${R(x.v)}</b><br><span class="badge ${x.s=='Paid'?'b-ok':x.s=='Approved'?'b-in':'b-warn'}">${x.s}</span></div></div>`).join('')}</div>
+  <button class="btn w p" onclick="invSheet()">+ Submit invoice</button>`;
+function invSheet(){sheet(`<h3 style="margin-top:0">Submit invoice</h3><div class="f"><label>Amount</label><input id="ia" type="number" placeholder="Rs"></div><div class="f"><label>Photo of invoice</label><input type="file"></div><button class="btn w p" onclick="M.inv.unshift({id:'INV-'+(82+M.inv.length),v:+$('#ia').value||25000,s:'Submitted',n:'Waiting for approval'});closeSheet();toast('Sent to school accounts');render()">Submit</button>`)}
+
+// ---------- INIT ----------
+render();
+</script>
+</body>
+</html>
