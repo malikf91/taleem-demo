@@ -108,7 +108,8 @@ td.r,th.r{text-align:right}
   <select id="campus" onchange="S.campus=this.value;render()" ></select>
   <div class="sp"></div>
   <select id="role" onchange="setRole(this.value)" title="View as">
-    <option value="owner">View as: Owner / Principal</option>
+    <option value="owner">View as: Owner (all campuses)</option>
+    <option value="principal">View as: Branch Principal</option>
     <option value="accounts">View as: Accounts clerk</option>
     <option value="front">View as: Front desk / Gate</option>
     <option value="teacher">View as: Teacher</option>
@@ -133,22 +134,102 @@ const FATH=['Imran','Tariq','Shahid','Kamran','Naveed','Asif','Rashid','Javed','
 const SUR=['Khan','Malik','Butt','Sheikh','Chaudhry','Raza','Siddiqui','Qureshi','Mirza','Awan','Hashmi','Gill'];
 const SUBJ=['English','Urdu','Math','Science','Islamiat','Social St.'];
 const MD=[0,1,0,0,2,0,1,3,0,1,0,2];
-const studs=[];
-for(let i=0;i<72;i++){
-  const f=i%2,c=CL[i%12],fn=f?GIRLS[(i>>1)%12]:BOYS[(i>>1)%12];
-  const sur=SUR[(i*7)%12],fa=FATH[(i*5)%12];
-  studs.push({id:'AN-'+(2401+i),i,name:fn+' '+sur,father:fa+' '+sur,sur,cls:c,sec:(i%24<12)?'A':'B',f,fee:FEE[c],
-    m:Math.min(3,MD[i%12]+(i%5==0?1:0)),van:i%4==1,part:0,phone:'0300-'+(1200000+i*7919%8800000),sib:false,disc:0});
-}
-[[3,19],[8,29],[10,41]].forEach(([a,b])=>{const x=studs[a],y=studs[b];y.father=x.father;y.sur=x.sur;y.name=y.name.split(' ')[0]+' '+x.sur;y.phone=x.phone;x.sib=y.sib=true;});
-studs[5].disc=50;studs[22].disc=100;
-const owedOf=s=>{const t=s.m?s.fee*s.m+(s.m>1?200*(s.m-1):0):0;const sd=(s.sib&&s.m)?Math.round(s.fee*.1):0;const tr=(s.van&&s.m&&T()=='a')?2500:0;return Math.max(0,t-sd+tr-s.part-(s.m?Math.round(s.fee*s.disc/100):0))};
-const lines=s=>{const L=[];if(!s.m)return L;L.push(['Tuition fee – Oct 2026',s.fee]);if(s.m>1){L.push(['Arrears ('+(s.m-1)+' month'+(s.m>2?'s':'')+')',s.fee*(s.m-1)]);L.push(['Late fine',200*(s.m-1)])}
-  if(s.van&&T()=='a')L.push(['Transport – Route 2',2500]);if(s.sib)L.push(['Sibling discount (10%)',-Math.round(s.fee*.1)]);if(s.disc)L.push(['Scholarship ('+s.disc+'%)',-Math.round(s.fee*s.disc/100)]);if(s.part)L.push(['Already paid (partial)',-s.part]);return L};
+// ================= DATA ENGINE: campuses, roster, fee model, vouchers, payments =================
+const H=(i,k)=>{let x=Math.imul(i+1,2654435761)^Math.imul(k+7,40503);x=Math.imul(x^(x>>>15),2246822519);x=Math.imul(x^(x>>>13),3266489917);x^=x>>>16;return (x>>>0)%1000/10};
+const TODAY_ISO='2026-10-12';
+const pad=(n,l=2)=>String(n).padStart(l,'0');
+const MNAME={'2026-08':'Aug 2026','2026-09':'Sep 2026','2026-10':'Oct 2026','2026-11':'Nov 2026','2026-12':'Dec 2026'};
+const BOYS2=BOYS.concat(['Daniyal','Haris','Talha','Shayan','Moiz','Arslan','Rohan','Sufyan','Ibrahim','Yahya','Awais','Kashif']);
+const GIRLS2=GIRLS.concat(['Amna','Rida','Esha','Kinza','Anaya','Alina','Dua','Mehak','Rabia','Samra','Tuba','Aleena']);
+const FATH2=FATH.concat(['Zahid','Aslam','Rizwan','Shafiq','Waqar','Farhan','Adnan','Yasir','Mansoor','Sohail','Khalid','Anwar']);
+const SUR2=SUR.concat(['Cheema','Bhatti','Rana','Dar','Lodhi','Mughal','Niazi','Rehman','Shah','Abbasi','Ansari','Baig']);
+
+// rate = % of October fees paid so far, abs = % absent today, er = expenses as share of income (Bahria > 1 = loss)
+const CP=[
+ {n:'Main Campus',short:'Main',pr:'Mrs. Farah Naz',stu:688,mul:1,rate:78,abs:8,er:.80,unm:[],staff:46,pres:44,venDue:356500,payDue:0},
+ {n:'Johar Town Campus',short:'Johar Town',pr:'Mr. Naeem Akhtar',stu:442,mul:.95,rate:75,abs:11,er:.84,unm:['Class 6-A'],staff:31,pres:29,venDue:148000,payDue:0},
+ {n:'Model Town Campus',short:'Model Town',pr:'Mrs. Sadia Rehman',stu:331,mul:1,rate:74,abs:6,er:.79,unm:[],staff:24,pres:23,venDue:74000,payDue:0},
+ {n:'DHA Phase 5 Campus',short:'DHA Phase 5',pr:'Mr. Imtiaz Hussain',stu:524,mul:1.25,rate:76,abs:5,er:.83,unm:[],staff:38,pres:37,venDue:205000,payDue:0},
+ {n:'Bahria Town Campus',short:'Bahria Town',pr:'Ms. Uzma Tariq',stu:276,mul:.85,rate:57,abs:14,er:1.18,unm:['Class 3-B','Class 8-A'],staff:22,pres:19,venDue:162000,payDue:150000}];
+
+// ---- roster ----
+const studs=[],NAMES=new Set();let gi=0;
+CP.forEach((c,ci)=>{c.ci=ci;c.first=gi;
+  for(let j=0;j<c.stu;j++,gi++){
+    const f=H(gi,11)<50?1:0,fn=f?GIRLS2[Math.floor(H(gi,61)*.24)]:BOYS2[Math.floor(H(gi,61)*.24)],fa=FATH2[Math.floor(H(gi,63)*.24)];
+    let si=Math.floor(H(gi,62)*.24),sur=SUR2[si];const cl0=CL[j%12],sc0=(j%24<12)?'A':'B';
+    while(NAMES.has(ci+cl0+sc0+fn+sur)){si=(si+1)%24;sur=SUR2[si]}NAMES.add(ci+cl0+sc0+fn+sur);
+    const s={id:'AN-'+(2401+gi),i:gi,ci,name:fn+' '+sur,father:fa+' '+sur,sur,cls:cl0,sec:sc0,f,van:H(gi,12)<25,
+      phone:'0300-'+String(1200000+(gi*7919)%8800000),sib:false,sibD:false,disc:0,dt:''};
+    const d=H(gi,3);
+    if(d<3.5){s.disc=25;s.dt='Merit scholarship (25%)'}else if(d<5){s.disc=50;s.dt='Staff-child concession (50%)'}else if(d<6){s.disc=30;s.dt='Need-based concession (30%)'}
+    if(j%9==8){const x=studs[gi-1];s.father=x.father;s.sur=x.sur;s.name=fn+' '+x.sur;s.phone=x.phone;x.sib=s.sib=true;
+      (CL.indexOf(x.cls)<CL.indexOf(s.cls)?x:s).sibD=true}
+    studs.push(s)}
+  c.last=gi});
+
+// ---- fee rules & structure ----
+const RULE={fine:200,dueDay:15,sib:10,limit:10};
+const FS=CP.map(c=>{const o={};CL.forEach(k=>o[k]={tuition:Math.round(FEE[k]*c.mul/100)*100,annual:(k=='Nursery'||k=='Prep')?5000:8000,exam:1500});return o});
+const TRANSPORT=2500;
+const ADMFEE=10000;
+const feeOf=s=>FS[s.ci][s.cls].tuition;
+
+// ---- vouchers & payments ----
+const V=[],VM={},VX={},PAY=[],CR={},VSEQ={},BATCHES=[];
+let RCN=48000;
+const vBal=v=>v.cancelled?0:Math.max(0,v.fee+v.fine-v.paid);
+const vOver=v=>!v.cancelled&&vBal(v)>0&&v.due<TODAY_ISO;
+const vStat=v=>{if(v.cancelled)return['Cancelled','b-in'];const b=vBal(v);if(b<=0)return['Paid','b-ok'];if(v.paid>0)return vOver(v)?['Overdue · part-paid','b-bad']:['Partial','b-warn'];return vOver(v)?['Overdue','b-bad']:['Unpaid','b-warn']};
+const owedOf=s=>(VX[s.i]||[]).reduce((a,v)=>a+vBal(v),0);
+const ovm=s=>(VX[s.i]||[]).filter(vOver).length;
+const dueIso=ym=>ym+'-'+pad(RULE.dueDay);
+function vLines(s,o){const f=FS[s.ci][s.cls],L=[['Tuition fee',f.tuition]];
+  if(o.adm)L.push(['Admission fee (one-time)',ADMFEE]);
+  if(o.an)L.push(['Annual charges',f.annual]);if(o.ex)L.push(['Exam fee (Term 1)',f.exam]);
+  if(o.tr&&s.van)L.push(['Transport – Route '+(1+s.i%3),TRANSPORT]);
+  if(o.misc&&+o.misc[1])L.push([o.misc[0]||'Misc',+o.misc[1]]);
+  if(s.sibD)L.push(['Sibling discount ('+RULE.sib+'%)',-Math.round(f.tuition*RULE.sib/100)]);
+  if(s.disc)L.push([s.dt,-Math.round(f.tuition*s.disc/100)]);return L}
+function mkV(s,ym,o,due){const L=vLines(s,o),n=VSEQ[ym]=(VSEQ[ym]||0)+1;
+  const v={id:'V'+ym.slice(2,4)+ym.slice(5)+'-'+pad(n,4),sid:s.i,ci:s.ci,mo:ym,lines:L,fee:L.reduce((a,l)=>a+l[1],0),fine:0,waived:false,paid:0,due:due||dueIso(ym),cancelled:false};
+  V.push(v);VM[v.id]=v;(VX[s.i]=VX[s.i]||[]).push(v);return v}
+function addPay(s,amt,m,date,by){
+  const open=(VX[s.i]||[]).filter(v=>vBal(v)>0).sort((a,b)=>a.mo<b.mo?-1:a.mo>b.mo?1:0);let left=amt;const al=[];
+  for(const v of open){if(left<=0)break;const a=Math.min(left,vBal(v));v.paid+=a;left-=a;al.push([v.id,v.mo,a])}
+  if(left>0)CR[s.i]=(CR[s.i]||0)+left;
+  const p={id:'RC-'+(++RCN),sid:s.i,ci:s.ci,date,amt,m,al,credit:left,by:by||'Accounts'};PAY.push(p);return p}
+const assessFine=v=>{if(!v.cancelled&&!v.waived&&!v.fine&&v.due<TODAY_ISO&&vBal(v)>0)v.fine=RULE.fine};
+
+// ---- seed: Aug, Sep, Oct vouchers and payments for every student ----
+studs.forEach(s=>{const c=CP[s.ci],h=n=>H(s.i,n);
+  const v8=mkV(s,'2026-08',{an:1,tr:1}),v9=mkV(s,'2026-09',{tr:1}),v10=mkV(s,'2026-10',{ex:1,tr:1});
+  const meth=()=>{const r=h(7);return r<45?'Cash':r<67?'Bank':r<81?'JazzCash':r<92?'Easypaisa':'1Bill'};
+  const dt=(ym,mx)=>ym+'-'+pad(1+Math.floor(h(6)*mx/100));
+  const paidO=h(1)<c.rate,d=paidO?0:(h(2)<12?3:h(2)<35?2:1);
+  if(d<3)addPay(s,v8.fee,meth(),dt('2026-08',14));
+  if(d<2)addPay(s,v9.fee,meth(),dt('2026-09',14));
+  if(paidO)addPay(s,v10.fee,meth(),dt('2026-10',12));
+  [v8,v9].forEach(assessFine);
+  if(d>=2&&h(5)<20){const o=[v8,v9].find(v=>vBal(v)>0);if(o)addPay(s,vBal(o),meth(),dt('2026-10',12))}
+  else if(d==1&&h(4)<18)addPay(s,Math.round(v10.fee/2),meth(),dt('2026-10',12));
+});
+PAY.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+['2026-08','2026-09','2026-10'].forEach((ym,k)=>{const vs_=V.filter(v=>v.mo==ym);
+  BATCHES.push({id:'B-'+(k+1),mo:ym,scope:'All campuses',cls:'All classes',n:vs_.length,total:vs_.reduce((a,v)=>a+v.fee,0),at:['1 Aug','1 Sep','1 Oct'][k]+' 2026, 09:10'})});
+
+// ---- scope helpers ----
+const inScope=ci=>S.campus=='All Campuses'||CP[ci].n==S.campus;
+const vs=()=>studs.filter(s=>inScope(s.ci));
+const agg=()=>{const g={n:'All Campuses',short:'All campuses',pr:'Group owner'};
+  ['stu','tgt','colO','col','today','arr','recv','pay','ven','oth','venDue','payDue','staff','pres'].forEach(k=>g[k]=CP.reduce((a,c)=>a+c[k],0));
+  g.att=Math.round(CP.reduce((a,c)=>a+c.att*c.stu,0)/g.stu);g.unm=[].concat(...CP.map(c=>c.unm));return g};
+
+// ---- campus statistics, always derived from vouchers / payments / attendance ----
+function initExpenses(){CP.forEach(c=>{const e=c.col*c.er;c.pay=Math.round(e*.72/1e4)*1e4;c.ven=Math.round(e*.08/1e3)*1e3;c.oth=Math.round(e*.20/1e3)*1e3})}
+const colMonth=(ci,ym)=>PAY.reduce((a,p)=>a+((ci==null||p.ci==ci)&&p.date.startsWith(ym)?p.amt:0),0);
 const T=()=>S.tier;
-const S={tier:'b',role:'owner',lang:'en',page:'dash',campus:'Main Campus',tab:{},
-  today:184500,month:2615000,target:3420000,
-  meth:{Cash:92000,Bank:41500,JazzCash:25000,Easypaisa:16000,'1Bill':10000},
+const S={tier:'a',role:'owner',lang:'en',page:'dash',campus:'All Campuses',tab:{},
   att:{},attSent:{},log:[],cls:'5',sec:'A',
   marks:{},visitors:[
     {n:'Mr. Salman Ahmed',p:'Meet principal – admission',t:'08:42',who:'Principal',out:null},
@@ -164,19 +245,6 @@ const S={tier:'b',role:'owner',lang:'en',page:'dash',campus:'Main Campus',tab:{}
     {d:'12 Oct',t:'Electricity bill (LESCO)',a:64200,by:'Accounts',st:'Paid'},
     {d:'11 Oct',t:'Lab chemicals',a:12800,by:'Accounts',st:'Paid'},
     {d:'10 Oct',t:'Generator diesel',a:15000,by:'Admin',st:'Pending'}],
-  staff:[
-    {n:'Ms. Saima Iqbal',r:'Teacher',s:62000,pres:true,adv:0,ab:0},
-    {n:'Mr. Adeel Hussain',r:'Teacher',s:58000,pres:true,adv:10000,ab:1},
-    {n:'Ms. Rabia Noor',r:'Teacher',s:55000,pres:false,adv:0,ab:2,leave:true},
-    {n:'Mr. Khalid Mehmood',r:'Teacher',s:60000,pres:true,adv:0,ab:0},
-    {n:'Ms. Nazia Perveen',r:'Teacher',s:52000,pres:true,adv:0,ab:0},
-    {n:'Ms. Hina Shaukat',r:'Teacher',s:50000,pres:true,adv:5000,ab:0},
-    {n:'Mr. Waseem Akhtar',r:'Accountant',s:45000,pres:true,adv:0,ab:0},
-    {n:'Ms. Tahira Bibi',r:'Front desk',s:32000,pres:true,adv:0,ab:0},
-    {n:'Abdul Ghaffar',r:'Gate guard',s:27000,pres:true,adv:3000,ab:0},
-    {n:'Muhammad Aslam',r:'Van driver',s:30000,pres:true,adv:0,ab:0},
-    {n:'Bashir Ahmed',r:'Peon',s:25000,pres:true,adv:0,ab:1},
-    {n:'Mai Zubaida',r:'Ayah',s:24000,pres:true,adv:0,ab:0}],
   appr:[
     {id:1,t:'Fee concession request – Hira Awan (Class 6)',d:'Father lost job; 50% for 3 months',who:'Accounts'},
     {id:2,t:'Expense: generator diesel',d:'Rs 15,000 – Admin',who:'Admin'},
@@ -190,23 +258,23 @@ const S={tier:'b',role:'owner',lang:'en',page:'dash',campus:'Main Campus',tab:{}
     {n:'Mahira (Nursery)',s:'Test',ph:'0333-8889990',src:'Referral'},
     {n:'Ibrahim (Class 7)',s:'Offered',ph:'0345-1239876',src:'Walk-in'},
     {n:'Eman (Class 1)',s:'Admitted',ph:'0300-6677889',src:'Referral'}]};
-studs.forEach(s=>{const x=s.i%9==0?'A':s.i%13==0?'L':'P';S.att[s.id]=x;});
+studs.forEach(s=>{const c=CP[s.ci],r=H(s.i,21);S.att[s.id]=r<c.abs?'A':r<c.abs+3?'L':'P'});
 studs.forEach(s=>{S.marks[s.id]=SUBJ.map((_,j)=>Math.round(48+((s.i*37+j*23)%50)))});
-const tot=()=>studs.reduce((a,s)=>a+owedOf(s),0);
+
 const grade=p=>p>=90?'A+':p>=80?'A':p>=70?'B':p>=60?'C':p>=50?'D':'F';
 const UR={dash:'ڈیش بورڈ',students:'طلباء',fees:'فیس',attendance:'حاضری',exams:'امتحانات',comms:'پیغامات',gate:'گیٹ اور مہمان',staff:'عملہ اور تنخواہ',vendors:'وینڈرز اور اخراجات',admissions:'داخلے',transport:'ٹرانسپورٹ',campuses:'کیمپس',settings:'سیٹنگز'};
 const NAV=[
- ['dash','🏠','Dashboard','b','owner,accounts,front'],
- ['students','🎓','Students','b','owner,accounts,front,teacher'],
- ['fees','💰','Fees','b','owner,accounts'],
- ['attendance','✅','Attendance','b','owner,front,teacher'],
- ['exams','📝','Exams & Results','b','owner,teacher'],
- ['comms','💬','Messages & Diary','b','owner,front,teacher'],
- ['gate','🚪','Gate & Visitors','b','owner,front'],
- ['staff','👩‍🏫','Staff & Payroll','b','owner,accounts'],
- ['vendors','🧾','Vendors & Expenses','b','owner,accounts'],
- ['admissions','📋','Admissions CRM','a','owner,front'],
- ['transport','🚌','Transport','a','owner,accounts,front'],
+ ['dash','🏠','Dashboard','b','owner,principal,accounts,front,teacher'],
+ ['students','🎓','Students','b','owner,principal,accounts,front,teacher'],
+ ['fees','💰','Fees','b','owner,principal,accounts'],
+ ['attendance','✅','Attendance','b','owner,principal,front,teacher'],
+ ['exams','📝','Exams & Results','b','owner,principal,teacher'],
+ ['comms','💬','Messages & Diary','b','owner,principal,front,teacher'],
+ ['gate','🚪','Gate & Visitors','b','owner,principal,front'],
+ ['staff','👩‍🏫','Staff & Payroll','b','owner,principal,accounts'],
+ ['vendors','🧾','Vendors & Expenses','b','owner,principal,accounts'],
+ ['admissions','📋','Admissions CRM','a','owner,principal,front'],
+ ['transport','🚌','Transport','a','owner,principal,accounts,front'],
  ['campuses','🏫','Campuses','a','owner'],
  ['settings','⚙️','Settings & Roles','b','owner']];
 const toast=m=>{const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)};
@@ -217,221 +285,488 @@ const curTab=(k,def)=>S.tab[k]||def;
 const lockBox=(t,d)=>`<div class="lock"><h3>🔒 ${t} — Advanced I</h3><div class="muted" style="max-width:520px;margin:auto">${d}</div><p><button class="btn a" onclick="setTier('a')">Preview Advanced I</button></p></div>`;
 const advOnly=(t,d,html)=>T()=='a'?html:lockBox(t,d);
 function setTier(t){S.tier=t;document.querySelectorAll('#tierseg button').forEach((b,i)=>b.classList.toggle('on',(i==0)==(t=='b')));$('#tierseg').classList.toggle('adv',t=='a');
-  
-  const sel=$('#campus');sel.innerHTML=t=='a'?['Main Campus','Johar Town Campus','Model Town Campus'].map(c=>`<option ${c==S.campus?'selected':''}>${c}</option>`).join(''):'<option>Main Campus</option>';
-  if(t=='b')S.campus='Main Campus';render()}
-function setRole(r){S.role=r;const ok=NAV.filter(n=>n[4].includes(r)).map(n=>n[0]);if(!ok.includes(S.page))S.page=ok[0];render()}
+  fillCampus();render()}
+function setRole(r){S.role=r;fillCampus();const ok=NAV.filter(n=>n[4].includes(r)).map(n=>n[0]);if(!ok.includes(S.page))S.page=ok[0];render()}
 function setLang(l){S.lang=l;document.querySelectorAll('#langseg button').forEach((b,i)=>b.classList.toggle('on',(i==0)==(l=='en')));document.body.classList.toggle('rtl',l=='ur');render()}
 function go(p){S.page=p;render();window.scrollTo(0,0)}
 function render(){
-  $('#schsub').textContent=S.campus+' · Lahore';
+  $('#schsub').textContent=(S.campus=='All Campuses'?'All '+CP.length+' campuses':S.campus)+' · Lahore';
   $('#nav').innerHTML=NAV.filter(n=>n[4].includes(S.role)).map(n=>`<a class="${S.page==n[0]?'on':''}" onclick="go('${n[0]}')"><span class="ic">${n[1]}</span>${S.lang=='ur'?UR[n[0]]:n[2]}${n[3]=='a'&&T()=='b'?'<span class="lk">Adv</span>':''}</a>`).join('');
   $('#main').innerHTML=(P[S.page]||P.dash)();
   if(window.after)window.after();
 }
-const campusMul=()=>S.campus=='Main Campus'?1:S.campus.startsWith('Johar')?.62:.48;
+const campusMul=()=>cpCur().stu/688;
 const wa=(m,time)=>`<div class="chatbg"><div class="wa">${m}<small>${time||'08:15'} ✓✓</small></div></div>`;
 const absentMsg=s=>`السلام علیکم! ${s.father} صاحب،\nآپ کا بچہ ${s.name} (کلاس ${s.cls}) آج ${TODAY} کو اسکول میں غیر حاضر ہے۔\n\nAssalam o Alaikum ${s.father} sahib, ${s.name} (Class ${s.cls}) is marked ABSENT today. Please contact the school if this is unexpected.\n– Al-Noor Grammar School`;
 const P={};
+// ================= STAFF ENGINE, ATTENDANCE SECTIONS, CAMPUS STATS =================
+const STAFF=[],LEAVES=[];
+const AB=['A','B'],SECS=[];CL.forEach(c=>AB.forEach(x=>SECS.push(c+'-'+x)));
+const FEM=['Saima','Rabia','Nazia','Hina','Tahira','Asma','Farah','Sobia','Mehwish','Uzma','Amna','Kiran','Sadia','Lubna','Rubina','Ayesha','Bushra','Samina','Naila','Shazia'];
+const MAL=['Adeel','Khalid','Waseem','Shahzad','Imran','Atif','Tariq','Bilal','Fahad','Naveed','Zeeshan','Salman','Qaiser','Jawad','Rashid','Nadeem','Arif','Faisal','Kamran','Asif'];
+const STL=['Iqbal','Hussain','Noor','Mehmood','Perveen','Shaukat','Akhtar','Rehman','Malik','Siddiqui','Javed','Chaudhry','Butt','Ahmed','Raza','Nawaz','Sheikh','Khan','Hashmi','Aslam'];
+const MAIN_T=[['Ms.','Saima','Iqbal'],['Mr.','Adeel','Hussain'],['Ms.','Rabia','Noor'],['Mr.','Khalid','Mehmood'],['Ms.','Nazia','Perveen'],['Ms.','Hina','Shaukat']];
+const ROLE_SALARY={Teacher:58000,Accountant:48000,'Front desk':32000,'Gate guard':27000,'Van driver':30000,'Peon / Ayah':24000,Principal:120000};
+const SYSROLE={Principal:'principal',Teacher:'teacher',Accountant:'accounts','Front desk':'front'};
+let STN=1001;
+function mkStaff(o){const s=Object.assign({id:'ST-'+(STN++),st:'active',adv:0,ab:0,cts:[],phone:'03'+(10+STN%40)+'-'+String(2000000+STN*7907%7000000),join:'2022-04-01',login:true,reason:''},o);STAFF.push(s);return s}
+// seed: staff for each campus, salaries scaled so campus payroll matches the demo expense budget
+function seedStaff(){
+  CP.forEach(c=>{const n=c.staff,mix=[['Principal',1],['Accountant',n>35?2:1],['Front desk',n>35?2:1],['Gate guard',n>35?3:2],['Van driver',Math.round(n*.08)],['Peon / Ayah',Math.round(n*.1)]];
+    const used=mix.reduce((a,m)=>a+m[1],0),nt=n-used,mine=[];
+    mix.forEach(([r,k])=>{for(let j=0;j<k;j++){let nm;
+      if(r=='Principal')nm=c.pr;else{const f=H(STN+j,41)<45,fi=Math.floor(H(STN*3+j,42)/5)%20;nm=(r=='Teacher'||r=='Front desk'||r=='Accountant'?(f?'Ms. '+FEM[fi]:'Mr. '+MAL[fi])+' '+STL[Math.floor(H(STN*5+j,43)/5)%20]:(MAL[fi]+' '+STL[Math.floor(H(STN*7+j,44)/5)%20]))}
+      mine.push(mkStaff({n:nm,r,ci:c.ci,s:ROLE_SALARY[r]}))}});
+    for(let j=0;j<nt;j++){let nm;if(c.ci==0&&j<6){const m=MAIN_T[j];nm=m[0]+' '+m[1]+' '+m[2]}else{const f=H(STN+j,45)<60,fi=Math.floor(H(STN*3+j,46)/5)%20;nm=(f?'Ms. '+FEM[fi]:'Mr. '+MAL[fi])+' '+STL[Math.floor(H(STN*5+j,47)/5)%20]}
+      mine.push(mkStaff({n:nm,r:'Teacher',ci:c.ci,s:ROLE_SALARY.Teacher+Math.round((H(STN+j,48)-50)*100)}))}
+    // scale to the campus budget, round to Rs 500
+    const sum=mine.reduce((a,x)=>a+x.s,0),k=c.pay/sum;mine.forEach(x=>x.s=Math.round(x.s*k/500)*500);
+    // class teachers: section 5-A belongs to the campus's first teacher
+    const T=mine.filter(x=>x.r=='Teacher');SECS.forEach((sec,k2)=>{const t=T[(((k2-12)%T.length)+T.length)%T.length];t.cts.push(sec)});
+    mine.forEach(x=>{const h=H(STN+x.s,49);x.ab=h<72?0:h<90?1:2;x.adv=H(x.s,50)<12?5000:H(x.s,51)<5?10000:0})});
+}
+// leave requests
+function seedLeaves(){const t=STAFF.find(x=>x.n=='Ms. Rabia Noor'&&x.ci==0);
+  LEAVES.push({id:1,sid:t.id,from:'2026-10-12',to:'2026-10-13',days:2,type:'Medical',paid:true,status:'Approved',cover:'Ms. Hina Shaukat',note:'Doctor appointment and rest'});
+  const j=STAFF.find(x=>x.ci==1&&x.r=='Teacher'&&!x.cts.includes('5-A'));
+  LEAVES.push({id:2,sid:j.id,from:'2026-10-14',to:'2026-10-14',days:1,type:'Casual',paid:true,status:'Pending',cover:'',note:'Family function'});}
+// today's staff attendance + class attendance submissions
+S.sat={};S.stime={};S.attDone={};S.leaves=LEAVES;S.payroll={};
+const secName=k=>(isNaN(k[0])?k:'Class '+k);
+const sectionList=ci=>SECS;
+function secTeacher(ci,k){return STAFF.find(x=>x.ci==ci&&x.st=='active'&&x.cts.includes(k))}
+function recomputeCP(){
+  CP.forEach(c=>{c.tgt=0;c.colO=0;c.col=0;c.today=0;c.recv=0;c.arr=0});
+  V.forEach(v=>{if(v.cancelled)return;const c=CP[v.ci],b=vBal(v);
+    if(v.mo=='2026-10'){c.tgt+=v.fee;c.colO+=Math.min(v.paid,v.fee)}c.recv+=b;if(v.mo<'2026-10')c.arr+=b});
+  PAY.forEach(p=>{if(p.date>='2026-10-01'){CP[p.ci].col+=p.amt;if(p.date==TODAY_ISO)CP[p.ci].today+=p.amt}});
+  CP.forEach(c=>{let ok=0,n=0;for(let i=c.first;i<c.last;i++){const a=S.att[studs[i].id];if(a){n++;if(a!='A')ok++}}c.att=n?Math.round(ok/n*100):0;
+    c.unm=SECS.filter(k=>!S.attDone[c.ci+'|'+k]).map(secName);
+    if(STAFF.length){const A=STAFF.filter(x=>x.ci==c.ci&&x.st=='active');c.staff=A.length;c.pres=A.filter(x=>S.sat[x.id]=='P').length;c.pay=A.reduce((a,x)=>a+x.s,0)}})}
+// payroll helpers
+const absDays=s=>s.ab+(S.sat[s.id]=='A'?1:0);
+const net=s=>Math.round(s.s-absDays(s)*s.s/30-s.adv);
+// monthly attendance per student (8 school days so far in October)
+const oab=s=>{const h=H(s.i,31);return h<60?0:h<82?1:h<93?2:h<98?3:4};
+const stPct=s=>Math.round((8-Math.min(8,oab(s)+(S.att[s.id]=='A'?1:0)))/8*100);
+
+// ---- boot sequence ----
+CP.forEach(c=>{c.unm0=c.unm.slice()});
+recomputeCP();initExpenses();seedStaff();seedLeaves();
+CP.forEach(c=>{const un=c.unm0.map(x=>x.replace('Class ',''));
+  SECS.forEach(k=>{if(!un.includes(k))S.attDone[c.ci+'|'+k]={by:(secTeacher(c.ci,k)||{n:'Class teacher'}).n,t:'08:'+pad(15+Math.floor(H(c.ci*40+SECS.indexOf(k),52)*.3))}});
+  // sections not yet marked have no marks for today
+  for(let i=c.first;i<c.last;i++){const s=studs[i];if(un.includes(s.cls+'-'+s.sec))delete S.att[s.id]}});
+// today's staff attendance: absent/leave counts follow each campus's demo numbers
+CP.forEach(c=>{const A=STAFF.filter(x=>x.ci==c.ci&&x.r!='Principal');const gone=Math.max(0,c.staff-c.pres);
+  const order=A.slice().sort((a,b)=>H(a.s,53)-H(b.s,53));
+  STAFF.filter(x=>x.ci==c.ci).forEach(x=>{S.sat[x.id]='P';S.stime[x.id]='07:'+pad(30+Math.floor(H(x.s,54)*.28))});
+  const rabia=STAFF.find(x=>x.n=='Ms. Rabia Noor'&&x.ci==c.ci);let k=0;
+  if(rabia){S.sat[rabia.id]='L';delete S.stime[rabia.id];k++}
+  for(const x of order){if(k>=gone)break;if(S.sat[x.id]=='P'){S.sat[x.id]=H(x.s,55)<50?'A':'L';delete S.stime[x.id];k++}}});
+recomputeCP();
 
 // ---------- DASHBOARD ----------
+// ---------- CAMPUS DATA (demo: 5 campuses) ----------
+const cpOf=n=>CP.find(c=>c.n==n);
+const cpCur=()=>S.campus=='All Campuses'?agg():cpOf(S.campus);
+const cpExp=c=>c.pay+c.ven+c.oth, cpNet=c=>c.col-cpExp(c), cpRec=c=>c.recv, cpPct=c=>Math.round(c.colO/c.tgt*100);
+const Mn=n=>{const a=Math.abs(n);return (n<0?'− ':'')+'Rs '+(a>=1e6?(a/1e6).toFixed(2)+'M':Math.round(a/1e3)+'K')};
+function fillCampus(){const sel=$('#campus'),adv=S.tier=='a';
+  const list=adv?(S.role=='owner'?['All Campuses']:[]).concat(CP.map(c=>c.n)):[CP[0].n];
+  if(!list.includes(S.campus))S.campus=list[0];
+  sel.innerHTML=list.map(c=>`<option ${c==S.campus?'selected':''}>${c}</option>`).join('');sel.disabled=list.length==1}
+function drill(n){S.campus=n;fillCampus();render();window.scrollTo(0,0)}
+const MO=['May','Jun','Jul','Aug','Sep','Oct'];
+const trend=c=>{const ci=c.ci,sep=colMonth(ci,'2026-09'),ex=cpExp(c);
+  const inc=[sep*.95,sep*.97,sep*.70,colMonth(ci,'2026-08'),sep,c.col].map(Math.round);
+  return MO.map((m,i)=>({m,inc:inc[i],ex:Math.round(ex*[.96,1,.92,1.01,1.02,1][i])}))};
+const trendCard=c=>{const t=trend(c),mx=Math.max(...t.map(x=>Math.max(x.inc,x.ex)));
+  return `<div class="card"><h3>Income vs expenses · last 6 months</h3><div class="bars" style="height:150px">${t.map(x=>`<div><div style="display:flex;gap:3px;align-items:flex-end;height:105px;justify-content:center"><i style="width:38%;height:${x.inc/mx*100}%;background:var(--brand);margin:0"></i><i style="width:38%;height:${x.ex/mx*100}%;background:var(--warn);margin:0"></i></div>${x.m}${x.m=='Oct'?'*':''}<br><span style="color:${x.inc>=x.ex?'var(--ok)':'var(--bad)'}">${x.inc>=x.ex?'+':'−'}${Math.round(Math.abs(x.inc-x.ex)/1000)}K</span></div>`).join('')}</div>
+  <div class="fl small"><span><span style="color:var(--brand)">●</span> Fees received</span><span><span style="color:var(--warn)">●</span> Expenses paid</span><span class="muted">* October is month to date</span></div></div>`};
+const plCard=c=>{const ex=cpExp(c),n=cpNet(c),row=(l,v,b)=>`<div class="row small"><span>${l}</span><${b?'b':'span'}>${R(v)}</${b?'b':'span'}></div>`;
+  return `<div class="card"><h3>Profit & loss · October so far <span class="badge b-in">Cash basis</span></h3>
+  ${row('Fee income received',c.col,1)}<div class="muted small" style="margin:6px 0 0">Expenses paid</div>
+  ${row('&nbsp;&nbsp;Staff payroll',c.pay)}${row('&nbsp;&nbsp;Vendors & supplies',c.ven)}${row('&nbsp;&nbsp;Utilities, rent & other',c.oth)}${row('Total expenses',ex,1)}
+  <div class="row"><b>Net surplus / (deficit)</b><b class="${n>=0?'up':'dn'}" style="font-size:19px">${n<0?'− ':''}${R(Math.abs(n))}</b></div>
+  <div class="small muted">${n>=0?'Surplus':'Deficit'} is ${Math.abs(Math.round(n/c.col*100))}% of fee income</div>
+  <div class="demo-note" style="margin:10px 0 0">Not in cash yet: fees billed but unpaid <b>${R(c.recv)}</b> (of which ${R(c.arr)} is from earlier months) · vendor bills & salaries unpaid <b>${R(c.venDue+c.payDue)}</b></div></div>`};
+const apprCard=()=>`<div class="card"><h3>Needs your approval <span class="badge b-warn">${S.appr.length}</span></h3>
+  ${S.appr.length?S.appr.map(a=>`<div class="row" style="align-items:flex-start"><div><b class="small">${a.t}</b><div class="muted small">${a.d} · ${a.who}</div></div><div class="fl"><button class="btn sm p" onclick="apprv(${a.id},1)">✓</button><button class="btn sm" onclick="apprv(${a.id},0)">✗</button></div></div>`).join(''):'<div class="muted">All clear 🎉</div>'}</div>`;
+const clTable=c=>{const rows=CL.map((k,i)=>({k,stu:Math.round(c.stu/12)+[3,-2,4,0,-3,2,-1,1,-4,2,0,-2][i],att:Math.max(70,Math.min(99,c.att+[2,3,1,0,-1,2,-3,1,-2,0,-4,1][(i+c.stu)%12])),col:Math.max(35,Math.min(98,cpPct(c)+[4,6,-2,3,-5,1,8,-3,2,-6,-9,5][(i+c.stu)%12]))})).sort((a,b)=>(a.att+a.col)-(b.att+b.col)).slice(0,6);
+  return `<div class="card"><h3>Classes needing attention <span class="muted" style="text-transform:none;letter-spacing:0">lowest attendance + collection</span></h3><div class="tw"><table><tr><th>Class</th><th class="r">Students</th><th class="r">Attendance today</th><th class="r">Fees collected</th></tr>
+  ${rows.map(r=>`<tr><td><b>Class ${r.k}</b></td><td class="r">${r.stu}</td><td class="r"><span class="badge ${r.att<88?'b-bad':r.att<92?'b-warn':'b-ok'}">${r.att}%</span></td><td class="r"><span class="badge ${r.col<60?'b-bad':r.col<72?'b-warn':'b-ok'}">${r.col}%</span></td></tr>`).join('')}</table></div></div>`};
+const cpStatus=c=>cpNet(c)<0||cpPct(c)<65?['Needs attention','b-bad']:(c.att<90||cpPct(c)<75)?['Watch','b-warn']:['Healthy','b-ok'];
+
 P.dash=()=>{
-  const m=campusMul(),out=tot()*m,pr=studs.filter(s=>S.att[s.id]=='P').length,ab=studs.filter(s=>S.att[s.id]=='A').length,lt=studs.filter(s=>S.att[s.id]=='L').length;
-  const pct=Math.round((pr+lt)/studs.length*100);
-  const mt=Object.entries(S.meth),mtot=mt.reduce((a,[,v])=>a+v,0),col=['#1b5fb5','#4b94ee','#e0413a','#1fa64a','#e8a317'];
-  const dl=studs.filter(s=>s.m>=2).sort((a,b)=>owedOf(b)-owedOf(a)).slice(0,5);
-  const bars=[142,168,121,196,175,152,S.today/1000].map((v,i)=>[['Tue','Wed','Thu','Fri','Sat','Sun','Mon'][i],v]);
-  const mx=Math.max(...bars.map(b=>b[1]));
-  return `<h2>${S.role=='accounts'?'Accounts dashboard':'Good morning'}</h2><div class="sub">${TODAY} · ${S.campus} · ${studs.length*m|0} students</div>
+  if(S.role=='accounts'||S.role=='front'||S.role=='teacher')return P.dashOps();
+  return (S.role=='owner'&&T()=='a'&&S.campus=='All Campuses')?dashOwner():dashPrincipal()};
+
+function dashOwner(){
+  const g=agg(),n=cpNet(g),ex=cpExp(g),X=[];
+  CP.forEach(c=>{
+    if(cpNet(c)<0)X.push([0,c,`Running at a loss: spent ${R(cpExp(c))}, received ${R(c.col)}`]);
+    if(cpPct(c)<65)X.push([0,c,`Only ${cpPct(c)}% of billed fees collected`]);
+    if(c.payDue)X.push([0,c,`Salaries unpaid: ${R(c.payDue)}`]);
+    if(c.att<90)X.push([1,c,`Attendance ${c.att}% today (below 90%)`]);
+    c.unm.forEach(u=>X.push([1,c,`${u} attendance not marked yet`]));
+    if(c.venDue>300000)X.push([1,c,`Vendor bills pending: ${R(c.venDue)}`])});
+  X.sort((a,b)=>a[0]-b[0]);
+  return `<h2>Group overview</h2><div class="sub">${TODAY} · All ${CP.length} campuses · ${g.stu.toLocaleString()} students · ${g.pres}/${g.staff} staff present</div>
   <div class="grid g4" style="margin-bottom:14px">
-   <div class="card kpi"><div class="l">Collected today</div><div class="v">${R(S.today*m)}</div><div class="d up">▲ 12% vs last Monday</div></div>
-   <div class="card kpi"><div class="l">October collected / target</div><div class="v">${R(S.month*m)}</div><div class="bar" style="margin-top:6px"><i style="width:${S.month/S.target*100}%"></i></div><div class="d muted">${Math.round(S.month/S.target*100)}% of ${R(S.target*m)}</div></div>
-   <div class="card kpi"><div class="l">Outstanding dues</div><div class="v dn">${R(out)}</div><div class="d muted">${studs.filter(s=>s.m).length} students · ${studs.filter(s=>s.m>=2).length} overdue 2+ months</div></div>
-   <div class="card kpi"><div class="l">Attendance today</div><div class="v">${pct}%</div><div class="d"><span class="dn">${ab} absent</span> · <span class="muted">${lt} late</span> · parents ${Object.keys(S.attSent).length?'notified ✓':'<b>not yet notified</b>'}</div></div>
+   <div class="card kpi"><div class="l">Fees received · October</div><div class="v">${Mn(g.col)}</div><div class="bar" style="margin-top:6px"><i style="width:${cpPct(g)}%"></i></div><div class="d muted">${cpPct(g)}% of ${Mn(g.tgt)} billed · ${Mn(g.today)} today</div></div>
+   <div class="card kpi"><div class="l">Expenses paid · October</div><div class="v">${Mn(ex)}</div><div class="d muted">Payroll ${Math.round(g.pay/ex*100)}% · vendors ${Math.round(g.ven/ex*100)}% · other ${Math.round(g.oth/ex*100)}%</div></div>
+   <div class="card kpi"><div class="l">Net surplus (cash)</div><div class="v ${n>=0?'up':'dn'}">${Mn(n)}</div><div class="d muted">${Math.round(n/g.col*100)}% of fee income</div></div>
+   <div class="card kpi"><div class="l">Fees still to receive</div><div class="v dn">${Mn(cpRec(g))}</div><div class="d muted">+ ${Mn(g.venDue+g.payDue)} bills & salaries to pay</div></div>
   </div>
   <div class="grid g32">
    <div>
-    <div class="card"><h3>Last 7 days collection (Rs '000)</h3><div class="bars">${bars.map(([d,v])=>`<div><i style="height:${v/mx*90}px"></i>${Math.round(v*m)}<br>${d}</div>`).join('')}</div></div>
-    <div class="card"><h3>How parents paid today</h3><div class="stack">${mt.map(([k,v],i)=>`<i style="width:${v/mtot*100}%;background:${col[i]}"></i>`).join('')}</div>
-     <div class="fl small">${mt.map(([k,v],i)=>`<span><span style="color:${col[i]}">●</span> ${k} ${R(v*m)}</span>`).join('')}</div></div>
-    <div class="card"><h3>Top defaulters <button class="btn sm" onclick="go('fees');S.tab.fees='def';render()">See all</button></h3>
-     ${dl.map(s=>`<div class="row"><div><b>${s.name}</b> <span class="muted small">${s.cls}-${s.sec} · ${s.father}</span></div><div><span class="badge b-bad">${s.m} mo</span> <b>${R(owedOf(s))}</b> <button class="btn sm g" onclick="remind([${s.i}])">WhatsApp</button></div></div>`).join('')}</div>
+    <div class="card"><h3>Campus comparison <span class="muted" style="text-transform:none;letter-spacing:0">tap a row to open that campus</span></h3><div class="tw"><table>
+     <tr><th>Campus</th><th class="r">Students</th><th>Fees collected</th><th class="r">To receive</th><th class="r">Attendance</th><th class="r">Net (cash)</th><th>Status</th></tr>
+     ${CP.map(c=>{const s=cpStatus(c);return `<tr class="click" onclick="drill('${c.n}')"><td><b>${c.short}</b><div class="muted small">${c.pr}</div></td><td class="r">${c.stu}</td><td style="min-width:110px"><div class="bar"><i style="width:${cpPct(c)}%;background:${cpPct(c)<65?'var(--bad)':'var(--brand)'}"></i></div><span class="small">${cpPct(c)}% · ${Mn(c.col)}</span></td><td class="r dn">${Mn(cpRec(c))}</td><td class="r">${c.att}%</td><td class="r ${cpNet(c)>=0?'up':'dn'}"><b>${Mn(cpNet(c))}</b></td><td><span class="badge ${s[1]}">${s[0]}</span></td></tr>`}).join('')}
+     <tr style="font-weight:700"><td>Total</td><td class="r">${g.stu}</td><td>${cpPct(g)}%</td><td class="r dn">${Mn(cpRec(g))}</td><td class="r">${g.att}%</td><td class="r ${n>=0?'up':'dn'}">${Mn(n)}</td><td></td></tr></table></div></div>
+    ${plCard(g)}
+    ${trendCard(g)}
    </div>
    <div>
-    <div class="card"><h3>Needs your approval <span class="badge b-warn">${S.appr.length}</span></h3>
-     ${S.appr.length?S.appr.map(a=>`<div class="row" style="align-items:flex-start"><div><b class="small">${a.t}</b><div class="muted small">${a.d} · ${a.who}</div></div><div class="fl"><button class="btn sm p" onclick="apprv(${a.id},1)">✓</button><button class="btn sm" onclick="apprv(${a.id},0)">✗</button></div></div>`).join(''):'<div class="muted">All clear 🎉</div>'}</div>
-    <div class="card"><h3>Alerts</h3>
-     <div class="row small"><span>⏰ Oct vouchers due on the 15th</span><span class="badge b-warn">3 days</span></div>
-     <div class="row small"><span>🚪 2 visitors currently on campus</span><button class="btn sm" onclick="go('gate')">View</button></div>
-     <div class="row small"><span>👩‍🏫 1 teacher on leave; class 7 needs cover</span>${T()=='a'?'<button class="btn sm a" onclick="toast(\'Substitute suggested: Ms. Hina (free period 3)\')">Assign</button>':'<span class="badge b-adv">Adv</span>'}</div>
-     <div class="row small"><span>📦 Registers running low (store)</span><span class="badge b-warn">Reorder</span></div></div>
-    ${T()=='a'?`<div class="card"><h3>Campus snapshot</h3>${[['Main',92,'Rs 2.6M'],['Johar Town',89,'Rs 1.6M'],['Model Town',94,'Rs 1.2M']].map(c=>`<div class="row small"><span>${c[0]}</span><span>${c[1]}% attendance</span><b>${c[2]}</b></div>`).join('')}</div>`:''}
+    <div class="card"><h3>Needs your attention <span class="badge b-bad">${X.length}</span></h3>
+     ${X.map(x=>`<div class="row small" style="align-items:flex-start"><div><span class="badge ${x[0]?'b-warn':'b-bad'}">${x[1].short}</span> ${x[2]}</div><button class="btn sm" onclick="drill('${x[1].n}')">Open</button></div>`).join('')}</div>
+    ${apprCard()}
+    <div class="card"><h3>Staff today</h3>${CP.map(c=>`<div class="row small"><span>${c.short}</span><span>${c.pres}/${c.staff} present${c.staff-c.pres>1?' <span class="badge b-warn">'+(c.staff-c.pres)+' out</span>':''}</span></div>`).join('')}</div>
    </div>
-  </div>`};
-function apprv(id,y){S.appr=S.appr.filter(a=>a.id!=id);toast(y?'Approved ✓ — requester notified':'Declined — requester notified');render()}
+  </div>`}
 
-// ---------- STUDENTS ----------
-P.students=()=>{
-  const q=(S.q||'').toLowerCase(),c=S.fcls||'';
-  const L=studs.filter(s=>(!c||s.cls==c)&&(!q||(s.name+s.father+s.id+s.phone).toLowerCase().includes(q)));
-  return `<h2>Students</h2><div class="sub">${studs.length} enrolled · siblings are linked automatically by guardian phone</div>
-  <div class="card"><div class="fl" style="margin-bottom:12px"><input style="max-width:280px" placeholder="Search name, father, roll no, phone…" value="${S.q||''}" oninput="S.q=this.value;render();const i=document.querySelector('#main input');i.focus();i.setSelectionRange(99,99)">
-   <select style="width:auto" onchange="S.fcls=this.value;render()"><option value="">All classes</option>${CL.map(x=>`<option ${c==x?'selected':''}>${x}</option>`).join('')}</select><div class="sp" style="flex:1"></div>
-   ${S.role=='teacher'?'':'<button class="btn" onclick="toast(\'Excel/Matrix import: upload a file, map columns, review, done\')">⬆ Import Excel</button><button class="btn p" onclick="admForm()">+ New admission</button>'}</div>
-   <div class="tw"><table><tr><th>Roll no</th><th>Student</th><th>Class</th><th>Guardian</th><th>Phone</th>${S.role=='teacher'?'':'<th class="r">Dues</th>'}<th></th></tr>
-   ${L.slice(0,40).map(s=>`<tr class="click" onclick="prof(${s.i})"><td class="muted">${s.id}</td><td><b>${s.name}</b> ${s.sib?'<span class="badge b-in">sibling</span>':''}</td><td>${s.cls}-${s.sec}</td><td>${s.father}</td><td class="muted">${s.phone}</td>${S.role=='teacher'?'':`<td class="r">${s.m?`<span class="dn">${R(owedOf(s))}</span>`:'<span class="up">Clear</span>'}</td>`}<td>›</td></tr>`).join('')}</table></div>
-   ${L.length>40?`<div class="muted small" style="padding-top:8px">Showing 40 of ${L.length}</div>`:''}${!L.length?'<div class="muted" style="padding:20px;text-align:center">No match</div>':''}</div>`};
-function prof(i){const s=studs[i],sibs=studs.filter(x=>x.sib&&x.phone==s.phone&&x.i!=i);
-  const ab=Math.round(2+(s.i%7));
-  openM(`<h2>${s.name}</h2><div class="muted">${s.id} · Class ${s.cls}-${s.sec} · ${s.f?'Female':'Male'}</div><br>
-  <div class="grid g3"><div class="card kpi" style="margin:0"><div class="l">Attendance (Oct)</div><div class="v">${100-ab}%</div></div>
-  ${S.role=='teacher'?'':`<div class="card kpi" style="margin:0"><div class="l">Dues</div><div class="v ${s.m?'dn':'up'}">${s.m?R(owedOf(s)):'Clear'}</div></div>`}
-  <div class="card kpi" style="margin:0"><div class="l">Last exam</div><div class="v">${Math.round(S.marks[s.id].reduce((a,b)=>a+b,0)/6)}%</div></div></div><br>
-  <div class="row"><span class="muted">Father / guardian</span><b>${s.father}</b></div><div class="row"><span class="muted">WhatsApp</span><b>${s.phone} <span class="badge b-ok">opted in</span></b></div>
-  <div class="row"><span class="muted">Monthly fee</span><b>${R(s.fee)}</b></div>${s.disc?`<div class="row"><span class="muted">Scholarship</span><b>${s.disc}%</b></div>`:''}
-  ${sibs.length?`<div class="row"><span class="muted">Sibling</span><b>${sibs.map(x=>x.name+' ('+x.cls+')').join(', ')} → 10% sibling discount</b></div>`:''}
-  <div class="row"><span class="muted">Authorised pickup</span><b>Father, Uncle (Imran), Driver Aslam</b></div>
-  <br><div class="fl"><button class="btn g" onclick="closeM();toast('WhatsApp chat opened with ${s.father}')">WhatsApp guardian</button>${S.role=='teacher'?'':`<button class="btn p" onclick="closeM();S.sel=${s.i};go('fees');S.tab.fees='collect';render()">Collect fee</button>`}<button class="btn" onclick="toast('Student ID card PDF generated')">ID card</button></div>`)}
-function admForm(){openM(`<h2>New admission</h2><div class="sub">Roll number AN-${2401+studs.length} will be assigned automatically</div><div class="frm">
- <div class="f"><label>Student name</label><input id="an" placeholder="e.g. Hassan Raza"></div><div class="f"><label>Class</label><select id="ac">${CL.map(c=>`<option>${c}</option>`).join('')}</select></div>
- <div class="f"><label>B-Form number</label><input placeholder="35202-1234567-8"></div><div class="f"><label>Date of birth</label><input type="date" value="2018-03-14"></div>
- <div class="f"><label>Father / guardian name</label><input id="af" placeholder="Father's name"></div><div class="f"><label>Father CNIC</label><input placeholder="35202-1234567-1"></div>
- <div class="f"><label>WhatsApp number</label><input placeholder="03XX-XXXXXXX"></div><div class="f"><label>Fee plan</label><select><option>Standard</option><option>Sibling discount</option><option>Scholarship 25%</option><option>Staff child</option></select></div>
- </div><label class="small"><input type="checkbox" checked style="width:auto"> Parent consents to WhatsApp/SMS alerts about their child</label><br><br>
- <button class="btn p" onclick="saveAdm()">Admit student</button>`)}
-function saveAdm(){const n=$('#an').value||'New Student',c=$('#ac').value,f=$('#af').value||'Guardian Khan',i=studs.length;
-  studs.push({id:'AN-'+(2401+i),i,name:n,father:f,sur:'',cls:c,sec:'A',f:0,fee:FEE[c],m:1,van:false,part:0,phone:'0300-1234567',sib:false,disc:0});S.att[studs[i].id]='P';S.marks[studs[i].id]=SUBJ.map(()=>0);
-  closeM();toast('Admitted: '+n+' · welcome message sent on WhatsApp');render()}
+function dashPrincipal(){
+  const c=cpCur(),n=cpNet(c),owner=S.role=='owner',adv=T()=='a',vis=S.visitors.filter(v=>!v.out).length;
+  const dl=topDef(5);
+  const A=[];
+  if(n<0)A.push(['b-bad',`Running at a loss this month: ${R(Math.abs(n))}`]);
+  if(c.payDue)A.push(['b-bad',`Salaries unpaid: ${R(c.payDue)}`]);
+  c.unm.forEach(u=>A.push(['b-warn',`${u} attendance not marked yet`]));
+  if(c.pres<c.staff)A.push(['b-warn',`${c.staff-c.pres} staff absent today`]);
+  if(c.att<90)A.push(['b-warn',`Attendance ${c.att}% — below 90%`]);
+  if(c.venDue>150000)A.push(['b-warn',`Vendor bills pending: ${R(c.venDue)}`]);
+  A.push(['b-in','Oct vouchers due on the 15th (3 days)']);
+  return `${owner&&adv?`<div class="small" style="margin-bottom:6px"><a href="#" onclick="drill('All Campuses');return false" style="color:var(--brand)">← All campuses</a></div>`:''}
+  <h2>${owner?c.short+' campus':'Good morning, '+c.pr}</h2><div class="sub">${TODAY} · ${owner?'Principal: '+c.pr+' · ':''}${c.stu} students · ${c.pres}/${c.staff} staff present</div>
+  <div class="grid g4" style="margin-bottom:14px">
+   <div class="card kpi"><div class="l">Fees received · October</div><div class="v">${Mn(c.col)}</div><div class="bar" style="margin-top:6px"><i style="width:${cpPct(c)}%;background:${cpPct(c)<65?'var(--bad)':'var(--brand)'}"></i></div><div class="d muted">${cpPct(c)}% of ${Mn(c.tgt)} billed</div></div>
+   <div class="card kpi"><div class="l">Net surplus (cash)</div><div class="v ${n>=0?'up':'dn'}">${Mn(n)}</div><div class="d muted">Spent ${Mn(cpExp(c))} · received ${Mn(c.col)}</div></div>
+   <div class="card kpi"><div class="l">Fees still to receive</div><div class="v dn">${Mn(cpRec(c))}</div><div class="d muted">incl. ${Mn(c.arr)} older arrears</div></div>
+   <div class="card kpi"><div class="l">Attendance today</div><div class="v">${c.att}%</div><div class="d ${c.unm.length?'dn':'muted'}">${c.unm.length?c.unm.length+' class'+(c.unm.length>1?'es':'')+' not marked':'All classes marked ✓'}</div></div>
+  </div>
+  <div class="grid g32">
+   <div>
+    ${plCard(c)}
+    ${clTable(c)}
+    ${trendCard(c)}
+    <div class="card"><h3>Top defaulters <button class="btn sm" onclick="go('fees');S.tab.fees='def';render()">See all</button></h3>
+     ${dl.map(s=>`<div class="row"><div><b>${s.name}</b> <span class="muted small">${s.cls}-${s.sec} · ${s.father}</span></div><div><span class="badge b-bad">${ovm(s)} mo</span> <b>${R(owedOf(s))}</b> <button class="btn sm g" onclick="remind([${s.i}])">WhatsApp</button></div></div>`).join('')}</div>
+   </div>
+   <div>
+    <div class="card"><h3>Today at school</h3>
+     <div class="row small"><span>💰 Collected today</span><b>${R(c.today)}</b></div>
+     <div class="row small"><span>👩‍🏫 Staff present</span><b>${c.pres}/${c.staff}</b></div>
+     <div class="row small"><span>🚪 Visitors on campus</span><b>${vis}</b></div></div>
+    <div class="card"><h3>Alerts</h3>${A.map(a=>`<div class="row small"><span>${a[1]}</span><span class="badge ${a[0]}">${a[0]=='b-bad'?'Urgent':a[0]=='b-warn'?'Check':'Info'}</span></div>`).join('')}</div>
+    ${apprCard()}
+   </div>
+  </div>`}
 
-// ---------- FEES ----------
-P.fees=()=>{
-  const t=curTab('fees','collect');
-  return `<h2>Fees</h2><div class="sub">Vouchers, collection, defaulters and fee structure</div>`+tab('fees',[['collect','Collect'],['vouch','Vouchers'],['def','Defaulters'],['online','Online payments',1],['struct','Fee structure']])+
-  ({collect:feeCollect,vouch:feeVouch,def:feeDef,online:feeOnline,struct:feeStruct}[t])()};
-function feeCollect(){
-  const s=S.sel!=null?studs[S.sel]:null,q=(S.fq||'').toLowerCase();
-  const res=q.length>1?studs.filter(x=>(x.name+x.father+x.id+x.phone).toLowerCase().includes(q)).slice(0,6):[];
-  return `<div class="grid g2"><div><div class="card"><h3>Find student</h3><input id="fq" placeholder="Type name, father, roll no or phone…" value="${S.fq||''}" oninput="S.fq=this.value;S.sel=null;render();const e=$('#fq');e.focus();e.setSelectionRange(99,99)" autofocus>
-   <div style="margin-top:8px">${res.map(x=>`<div class="row click" style="cursor:pointer" onclick="S.sel=${x.i};render()"><span><b>${x.name}</b> <span class="muted small">${x.id} · ${x.cls}-${x.sec} · ${x.father}</span></span>${x.m?`<b class="dn">${R(owedOf(x))}</b>`:'<span class="badge b-ok">Paid</span>'}</div>`).join('')}</div>
-   ${!s&&!res.length?'<p class="muted small">Tip: scan the barcode on the voucher or type 2+ letters. Siblings show together so one visit clears all.</p>':''}</div>
-   <div class="card"><h3>Today\'s desk</h3><div class="row"><span>Receipts issued</span><b>41</b></div><div class="row"><span>Cash in drawer</span><b>${R(S.meth.Cash)}</b></div><div class="row"><span>Bank / wallet</span><b>${R(S.today-S.meth.Cash)}</b></div></div></div>
-   <div>${s?feeSlip(s):'<div class="card muted" style="text-align:center;padding:40px">Select a student to see their voucher</div>'}</div></div>`}
-function feeSlip(s){const L=lines(s),o=owedOf(s),sibs=studs.filter(x=>x.sib&&x.phone==s.phone&&x.i!=s.i&&x.m);
-  return `<div class="card"><h3>Voucher · ${s.name}</h3><div class="muted small" style="margin-bottom:8px">${s.id} · Class ${s.cls}-${s.sec} · ${s.father}</div>
-  ${L.length?L.map(l=>`<div class="row"><span>${l[0]}</span><b class="${l[1]<0?'up':''}">${l[1]<0?'−':''}${R(Math.abs(l[1]))}</b></div>`).join(''):'<div class="badge b-ok" style="margin:8px 0">No dues — fully paid for October</div>'}
-  ${L.length?`<div class="row" style="font-size:17px"><b>Total payable</b><b>${R(o)}</b></div>
-  ${sibs.length?`<div class="demo-note">Sibling ${sibs[0].name} also owes ${R(owedOf(sibs[0]))}. <a href="#" onclick="S.sel=${sibs[0].i};render();return false">Open sibling voucher</a></div>`:''}
-  <div class="f"><label>Payment method</label><div class="pill-in" id="pms">${['Cash','Bank','JazzCash','Easypaisa','1Bill'].map((m,i)=>`<span class="pm ${i?'':'on'}" onclick="document.querySelectorAll('#pms .pm').forEach(x=>x.classList.remove('on'));this.classList.add('on')">${m}</span>`).join('')}</div></div>
-  <div class="f"><label>Amount received (partial payments allowed)</label><input id="amt" type="number" value="${o}"></div>
-  <button class="btn p" style="width:100%;padding:11px" onclick="collect(${s.i})">Collect & print receipt</button>`:''}</div>`}
-function collect(i){const s=studs[i],o=owedOf(s),a=Math.min(+$('#amt').value||0,o),m=document.querySelector('#pms .pm.on').textContent;
-  if(a<=0)return toast('Enter an amount');
-  const bal=o-a;if(bal<=0){s.m=0;s.part=0}else s.part+=a;
-  S.today+=a;S.month+=a;S.meth[m]=(S.meth[m]||0)+a;
-  const rc='RC-'+(48210+Math.floor(Math.random()*90));
-  openM(`<div class="receipt"><h4>Al-Noor Grammar School</h4><div class="c">Fee receipt ${rc} · ${TODAY}</div>
-  <div class="row"><span>Student</span><b>${s.name} (${s.id})</b></div><div class="row"><span>Class</span><b>${s.cls}-${s.sec}</b></div><div class="row"><span>Method</span><b>${m}</b></div>
-  <div class="row"><span>Received</span><b>${R(a)}</b></div><div class="row"><span>Balance</span><b class="${bal>0?'dn':'up'}">${bal>0?R(bal):'Nil'}</b></div><div class="c" style="margin-top:8px">Thank you · Computer generated receipt</div></div><br>
-  <div class="fl"><button class="btn p" onclick="toast('Sent to printer (thermal 80mm)')">🖨 Print</button><button class="btn g" onclick="toast('Receipt sent to ${s.father} on WhatsApp');closeM()">Send on WhatsApp</button><button class="btn" onclick="closeM()">Done</button></div>`);render()}
-function feeVouch(){return `<div class="grid g2"><div class="card"><h3>Generate vouchers</h3>
-  <div class="f"><label>Month</label><select><option>November 2026</option><option selected>October 2026 (generated)</option></select></div>
-  <div class="f"><label>Classes</label><select><option>All classes (${studs.length} students)</option>${CL.map(c=>`<option>Class ${c}</option>`).join('')}</select></div>
-  <div class="f"><label>Due date</label><input type="date" value="2026-11-10"></div>
-  <div class="f"><label>Include</label><div class="small">☑ Arrears & late fine ☑ Sibling discounts ☑ Scholarships ${T()=='a'?'☑ Transport':'☐ Transport <span class="badge b-adv">Adv</span>'}</div></div>
-  <button class="btn p" onclick="toast('${studs.length} vouchers generated for November in 4 seconds')">Generate ${studs.length} vouchers</button></div>
-  <div><div class="card"><h3>Voucher preview (3 copies: bank, school, parent)</h3><div class="receipt"><h4>Al-Noor Grammar School</h4><div class="c">Fee voucher · Nov 2026 · Due 10 Nov</div>
-  <div class="row"><span>Hira Awan · AN-2406 · Class 6-A</span><b>${R(7000)}</b></div><div class="row"><span>Late fine</span><b>Rs 0</b></div>
-  <div class="row"><b>Payable</b><b>${R(7000)}</b></div><div class="small muted">1Bill PSID: 1001 2026 2406 · Bank Alfalah A/C 0123-4567890 · Pay via JazzCash / Easypaisa → 1Bill</div>
-  <div style="height:34px;background:repeating-linear-gradient(90deg,var(--ink) 0 2px,transparent 2px 5px);margin-top:8px;opacity:.7"></div></div></div>
-  <div class="card"><h3>Send vouchers to parents</h3><div class="fl"><button class="btn" onclick="toast('Print queue: ${studs.length} vouchers, 3-up A4')">🖨 Print</button><button class="btn g" onclick="toast('Voucher PDFs sent on WhatsApp to ${studs.length} parents')">WhatsApp PDF</button><button class="btn" onclick="toast('Published to parent app')">Parent app</button></div></div></div></div>`}
-function remind(ids){const L=ids.map(i=>studs[i]);
-  openM(`<h2>WhatsApp fee reminder</h2><div class="sub">${L.length} parent${L.length>1?'s':''} selected</div>${wa(`السلام علیکم ${L[0].father} صاحب،\n${L[0].name} کی فیس ${R(owedOf(L[0]))} واجب الادا ہے۔ براہ کرم 15 اکتوبر تک ادا کر دیں۔\n\nAssalam o Alaikum ${L[0].father} sahib, ${L[0].name}'s fee of ${R(owedOf(L[0]))} is pending. Pay via 1Bill PSID 1001 2026 ${L[0].id.slice(3)} or at school.\n– Al-Noor Grammar School`,'09:30')}
-  ${T()=='a'?'<p class="small muted">Advanced: auto-fallback to SMS if not delivered in 1 hour; reminder repeats every 5 days until paid.</p>':'<p class="small muted">Basic: sent once now. <span class="badge b-adv">Adv</span> adds scheduled repeats and SMS fallback.</p>'}
-  <br><button class="btn g" onclick="S.log.unshift('Fee reminder → ${L.length} parents');closeM();toast('Sent ${L.length} WhatsApp reminder${L.length>1?'s':''}')">Send now</button>`)}
-function feeDef(){const L=studs.filter(s=>s.m).sort((a,b)=>b.m-a.m||owedOf(b)-owedOf(a));const f=S.dfilt||0;const F=L.filter(s=>f==0||(f==3?s.m>=3:s.m==f));
-  return `<div class="card"><div class="fl" style="margin-bottom:10px">${[[0,'All ('+L.length+')'],[1,'1 month'],[2,'2 months'],[3,'3+ months']].map(([k,l])=>`<span class="chip ${f==k?'on':''}" onclick="S.dfilt=${k};render()">${l}</span>`).join('')}<div style="flex:1"></div>
-  <button class="btn g" onclick="remind(window.dsel&&dsel.length?dsel:[${F.slice(0,3).map(s=>s.i)}])">WhatsApp selected</button></div>
-  <div class="tw"><table><tr><th></th><th>Student</th><th>Class</th><th>Guardian</th><th>Overdue</th><th class="r">Amount</th></tr>
-  ${F.slice(0,25).map(s=>`<tr><td><input type="checkbox" style="width:auto" onchange="window.dsel=window.dsel||[];this.checked?dsel.push(${s.i}):dsel.splice(dsel.indexOf(${s.i}),1)"></td><td><b>${s.name}</b></td><td>${s.cls}-${s.sec}</td><td>${s.father}</td><td><span class="badge ${s.m>2?'b-bad':'b-warn'}">${s.m} mo</span></td><td class="r"><b>${R(owedOf(s))}</b></td></tr>`).join('')}</table></div></div>`}
+function apprv(id,y){const ap=S.appr.find(a=>a.id==id);if(ap)apprExtra(ap,y);S.appr=S.appr.filter(a=>a.id!=id);toast(y?'Approved ✓ — requester notified':'Declined — requester notified');render()}
+
 function feeOnline(){return advOnly('Online payments & auto-reconciliation','Parents pay from the app with JazzCash, Easypaisa, 1Bill or a bank app. Payments match vouchers automatically; no clerk entry, no screenshots in WhatsApp.',`
   <div class="grid g3" style="margin-bottom:14px"><div class="card kpi" style="margin:0"><div class="l">Paid online today</div><div class="v">${R(51000)}</div></div><div class="card kpi" style="margin:0"><div class="l">Auto-matched</div><div class="v up">98%</div></div><div class="card kpi" style="margin:0"><div class="l">Needs review</div><div class="v dn">2</div></div></div>
   <div class="card"><div class="tw"><table><tr><th>Time</th><th>Student</th><th>Via</th><th>Ref</th><th class="r">Amount</th><th>Status</th></tr>
   ${[['10:42','Ayesha Khan','JazzCash','JC88123',7400,1],['10:15','Bilal Malik','1Bill','1B-55120',5200,1],['09:50','Zain Butt','Easypaisa','EP-90311',6500,1],['09:12','Unknown payer','Bank transfer','IBFT-7781',6000,0]].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td class="muted">${r[3]}</td><td class="r">${R(r[4])}</td><td>${r[5]?'<span class="badge b-ok">Matched</span>':'<button class="btn sm a" onclick="toast(\'Matched to Hira Awan (AN-2406) by amount + parent phone\')">Review</button>'}</td></tr>`).join('')}</table></div></div>`)}
-function feeStruct(){return `<div class="grid g32"><div class="card"><h3>Monthly fee per class</h3><div class="tw"><table><tr><th>Class</th><th>Tuition</th><th>Annual charges</th><th>Exam fee</th></tr>
-  ${CL.map(c=>`<tr><td><b>${c}</b></td><td><input style="width:100px" value="${FEE[c]}"></td><td><input style="width:90px" value="${c=='Nursery'||c=='Prep'?5000:8000}"></td><td><input style="width:80px" value="${1500}"></td></tr>`).join('')}</table></div>
-  <br><button class="btn p" onclick="toast('Fee structure saved; applies from November vouchers')">Save</button></div>
-  <div><div class="card"><h3>Rules</h3><div class="f"><label>Sibling discount</label><input value="10% on younger child"></div><div class="f"><label>Late fine</label><input value="Rs 200 per month after 10th"></div><div class="f"><label>Scholarships</label><input value="Merit 25%, Staff child 50%, Need-based (approval)"></div>
-  <div class="f"><label>Concession approval limit</label><input value="Accounts up to 10%, above → Principal"></div></div></div></div>`}
+// ================= STUDENTS, FEES, ACCOUNTANT / FRONT DASHBOARDS =================
+const MS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const fd=d=>+d.slice(8)+' '+MS[+d.slice(5,7)-1];
+const METHODS=['Cash','Bank','JazzCash','Easypaisa','1Bill'];
+const topDef=n=>vs().filter(s=>ovm(s)>=2).sort((a,b)=>owedOf(b)-owedOf(a)).slice(0,n);
+const campTag=s=>S.campus=='All Campuses'?` <span class="badge b-in">${CP[s.ci].short}</span>`:'';
+const pgBar=(total,per,cur,set)=>{if(total<=per)return `<div class="muted small" style="padding-top:8px">${total} record${total==1?'':'s'}</div>`;
+  const pg=Math.ceil(total/per);return `<div class="fl" style="padding-top:10px;justify-content:space-between"><span class="muted small">Showing ${cur*per+1}–${Math.min(total,cur*per+per)} of ${total}</span>
+  <span class="fl"><button class="btn sm" ${cur?'':'disabled'} onclick="${set}=${cur-1};render()">‹ Prev</button><span class="small muted">Page ${cur+1} of ${pg}</span><button class="btn sm" ${cur<pg-1?'':'disabled'} onclick="${set}=${cur+1};render()">Next ›</button></span></div>`};
+function dlCSV(name,rows){const t=rows.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/csv'}));a.download=name+'.csv';document.body.appendChild(a);a.click();a.remove();toast('Exported '+name+'.csv — opens in Excel')}
+const feeRole=()=>S.role=='owner'||S.role=='principal';
+const vKey=v=>v.cancelled?'canc':vBal(v)<=0?'paid':vOver(v)?'over':v.paid>0?'part':'unpaid';
+const sOf=v=>studs[v.sid];
 
-// ---------- ATTENDANCE ----------
-P.attendance=()=>{
-  const t=curTab('att','stu');
-  const body=t=='stu'?attStu():attStaff();
-  return `<h2>Attendance</h2><div class="sub">${TODAY} · Mark by 9:00 — parents of absent students are notified instantly</div>`+tab('att',[['stu','Students'],['stf','Staff & teachers']])+body};
-function attStu(){
-  const L=studs.filter(s=>s.cls==S.cls&&s.sec==S.sec),ab=L.filter(s=>S.att[s.id]=='A'),sent=ab.length&&ab.every(s=>S.attSent[s.id]);
-  return `<div class="card"><div class="fl" style="margin-bottom:12px"><select style="width:auto" onchange="S.cls=this.value;render()">${CL.map(c=>`<option ${S.cls==c?'selected':''}>${c}</option>`).join('')}</select>
-  <select style="width:auto" onchange="S.sec=this.value;render()">${['A','B'].map(c=>`<option ${S.sec==c?'selected':''}>${c}</option>`).join('')}</select>
-  <span class="muted">Class teacher: Ms. Saima Iqbal</span><div style="flex:1"></div>
-  <button class="btn sm" onclick="L2('P')">All present</button></div>
-  <div class="tw"><table><tr><th>Roll</th><th>Name</th><th>Mark</th><th>WhatsApp to parent</th></tr>
-  ${L.map(s=>`<tr><td class="muted">${s.id}</td><td><b>${s.name}</b></td><td class="att">${['P','A','L'].map(x=>`<button class="${x} ${S.att[s.id]==x?'on':''}" onclick="S.att['${s.id}']='${x}';delete S.attSent['${s.id}'];render()">${x}</button>`).join('')}</td>
-   <td>${S.att[s.id]=='A'?(S.attSent[s.id]?'<span class="badge b-ok">Sent ✓✓</span>':'<span class="badge b-warn">Pending</span>'):'<span class="muted">—</span>'}</td></tr>`).join('')}</table></div>
-  <div class="fl" style="margin-top:12px"><span class="muted small">${L.filter(s=>S.att[s.id]=='P').length} present · ${ab.length} absent · ${L.filter(s=>S.att[s.id]=='L').length} late</span><div style="flex:1"></div>
-  <button class="btn g" ${ab.length&&!sent?'':'disabled'} onclick="attNotify()">Submit & notify ${ab.length} parent${ab.length==1?'':'s'}</button></div></div>
-  ${T()=='a'?'<div class="demo-note">Advanced: parents are alerted automatically on submit; unreplied absences get a teacher follow-up task; SMS fallback if WhatsApp fails.</div>':'<div class="demo-note">Basic: tap “Submit & notify” once; WhatsApp goes to every absent child’s parent. <b>Advanced I</b> sends automatically and falls back to SMS.</div>'}`}
-function L2(x){studs.filter(s=>s.cls==S.cls&&s.sec==S.sec).forEach(s=>{S.att[s.id]=x;delete S.attSent[s.id]});render()}
-function attNotify(){const ab=studs.filter(s=>s.cls==S.cls&&s.sec==S.sec&&S.att[s.id]=='A');
-  openM(`<h2>Message preview</h2><div class="sub">Sent to ${ab.length} parent${ab.length>1?'s':''} · Urdu + English</div>${wa(absentMsg(ab[0]),'09:02')}<br><button class="btn g" onclick="attSend()">Send ${ab.length} WhatsApp${ab.length>1?'s':''}</button>`)}
-function attSend(){studs.filter(s=>s.cls==S.cls&&s.sec==S.sec&&S.att[s.id]=='A').forEach(s=>{S.attSent[s.id]=1;S.log.unshift('Absent alert → '+s.father+' ('+s.name+')')});closeM();toast('Absent alerts delivered ✓✓');render()}
-function attStaff(){return `<div class="card"><div class="tw"><table><tr><th>Name</th><th>Role</th><th>Status</th><th>Check-in</th></tr>${S.staff.map(s=>`<tr><td><b>${s.n}</b></td><td>${s.r}</td><td>${s.pres?'<span class="badge b-ok">Present</span>':s.leave?'<span class="badge b-warn">On leave</span>':'<span class="badge b-bad">Absent</span>'}</td><td class="muted">${s.pres?'07:'+(40+s.n.length%15):'—'}</td></tr>`).join('')}</table></div></div>
-  ${advOnly('Leave & substitute management','Teachers apply for leave in the app. The principal approves, and Taleem suggests a free teacher for each missed period.','<div class="card"><b>Class 7 – Period 3 (Science)</b><div class="muted">Ms. Rabia Noor on leave</div><p>Suggested cover: <b>Ms. Hina Shaukat</b> (free) <button class="btn sm a" onclick="toast(\'Assigned; Ms. Hina notified\')">Assign</button></p></div>')}`}
+// ---------- ACCOUNTANT DASHBOARD ----------
+P.dashOps=()=>S.role=='teacher'?dashTeacher():S.role=='front'?dashFront():dashAcct();
+function dashAcct(){
+  const c=cpCur(),mine=V.filter(v=>inScope(v.ci)&&v.mo=='2026-10'&&!v.cancelled),cnt={paid:0,part:0,unpaid:0,over:0};
+  mine.forEach(v=>cnt[vKey(v)]++);
+  const todayP=PAY.filter(p=>p.date==TODAY_ISO&&inScope(p.ci)),byM={};todayP.forEach(p=>byM[p.m]=(byM[p.m]||0)+p.amt);
+  const days=['2026-10-06','2026-10-07','2026-10-08','2026-10-09','2026-10-10','2026-10-11','2026-10-12'].map(d=>[fd(d),PAY.filter(p=>p.date==d&&inScope(p.ci)).reduce((a,p)=>a+p.amt,0)]),mx=Math.max(...days.map(d=>d[1]),1);
+  const odV=V.filter(v=>inScope(v.ci)&&vOver(v)).length,dl=topDef(5),ven=S.vendors.reduce((a,v)=>a+v.due,0);
+  const col=['#1fa64a','#e8a317','#e0413a','#e0413a'];const tt=mine.length||1;
+  return `<h2>Accounts dashboard</h2><div class="sub">${TODAY} · ${c.n} · ${c.stu} students</div>
+  <div class="grid g4" style="margin-bottom:14px">
+   <div class="card kpi"><div class="l">Collected today</div><div class="v">${R(c.today)}</div><div class="d muted">${todayP.length} receipts</div></div>
+   <div class="card kpi"><div class="l">October received / billed</div><div class="v">${Mn(c.col)}</div><div class="bar" style="margin-top:6px"><i style="width:${cpPct(c)}%"></i></div><div class="d muted">${cpPct(c)}% of ${Mn(c.tgt)} billed</div></div>
+   <div class="card kpi"><div class="l">Total outstanding</div><div class="v dn">${Mn(c.recv)}</div><div class="d muted">${odV} overdue vouchers · ${Mn(c.arr)} from earlier months</div></div>
+   <div class="card kpi"><div class="l">Vouchers today</div><div class="v">${mine.length}</div><div class="d muted"><button class="btn sm" onclick="go('fees');S.tab.fees='gen';render()">Generate Nov →</button></div></div>
+  </div>
+  <div class="grid g32"><div>
+   <div class="card"><h3>October vouchers by status <button class="btn sm" onclick="S.vf={mo:'2026-10',st:'',cls:'',q:'',pg:0};go('fees');S.tab.fees='vouch';render()">Open register</button></h3>
+    <div class="stack">${['paid','part','unpaid','over'].map((k,i)=>`<i style="width:${cnt[k]/tt*100}%;background:${col[i]}"></i>`).join('')}</div>
+    <div class="fl small">${[['paid','Paid'],['part','Partial'],['unpaid','Unpaid, not yet due'],['over','Overdue']].map(([k,l],i)=>`<span><span style="color:${col[i]}">●</span> ${l} <b>${cnt[k]}</b></span>`).join('')}</div></div>
+   <div class="card"><h3>Last 7 days collection</h3><div class="bars">${days.map(d=>`<div><i style="height:${d[1]/mx*90}px"></i>${Math.round(d[1]/1000)}K<br>${d[0]}</div>`).join('')}</div></div>
+   <div class="card"><h3>Top defaulters <button class="btn sm" onclick="go('fees');S.tab.fees='def';render()">See all</button></h3>
+    ${dl.map(s=>`<div class="row"><div><b>${s.name}</b> <span class="muted small">${s.cls}-${s.sec} · ${s.father}</span></div><div><span class="badge b-bad">${ovm(s)} mo</span> <b>${R(owedOf(s))}</b> <button class="btn sm g" onclick="remind([${s.i}])">WhatsApp</button></div></div>`).join('')||'<div class="muted">No defaulters</div>'}</div>
+  </div><div>
+   <div class="card"><h3>Quick actions</h3><div class="fl"><button class="btn p" onclick="go('fees');S.tab.fees='collect';render()">Collect fee</button><button class="btn" onclick="go('fees');S.tab.fees='gen';render()">Generate vouchers</button><button class="btn" onclick="go('fees');S.tab.fees='day';render()">Day close</button><button class="btn" onclick="go('fees');S.tab.fees='rep';render()">Reports</button></div></div>
+   <div class="card"><h3>Today by method</h3>${METHODS.map(m=>`<div class="row small"><span>${m}</span><b>${R(byM[m]||0)}</b></div>`).join('')}</div>
+   <div class="card"><h3>To do</h3>
+    <div class="row small"><span>⏰ Oct vouchers due on the 15th</span><span class="badge b-warn">3 days</span></div>
+    <div class="row small"><span>🔒 Day close for today</span><button class="btn sm" onclick="go('fees');S.tab.fees='day';render()">${S.closed&&S.closed[c.n+TODAY_ISO]?'Closed ✓':'Do it'}</button></div>
+    <div class="row small"><span>🧾 Vendor bills unpaid</span><button class="btn sm" onclick="go('vendors')">${R(ven)}</button></div>
+    <div class="row small"><span>👩‍🏫 Salaries for October</span><button class="btn sm" onclick="go('staff')">Review</button></div></div>
+  </div></div>`}
+function dashFront(){
+  const c=cpCur(),L=vs().filter(s=>S.att[s.id]=='L'),ab=vs().filter(s=>S.att[s.id]=='A'),vis=S.visitors.filter(v=>!v.out),leads=S.lead.filter(l=>l.s!='Admitted');
+  return `<h2>Front desk</h2><div class="sub">${TODAY} · ${c.n}</div>
+  <div class="grid g4" style="margin-bottom:14px">
+   <div class="card kpi"><div class="l">Visitors on campus</div><div class="v">${vis.length}</div></div>
+   <div class="card kpi"><div class="l">Absent today</div><div class="v dn">${ab.length}</div><div class="d muted">${Object.keys(S.attSent).length?'parents notified':'parents not yet notified'}</div></div>
+   <div class="card kpi"><div class="l">Late arrivals</div><div class="v">${L.length}</div></div>
+   <div class="card kpi"><div class="l">Admission follow-ups</div><div class="v">${leads.length}</div></div></div>
+  <div class="grid g2"><div class="card"><h3>On campus now <button class="btn sm" onclick="go('gate')">Gate & visitors</button></h3>${vis.map(v=>`<div class="row small"><span><b>${v.n}</b><br><span class="muted">${v.p}</span></span><span class="muted">${v.t}</span></div>`).join('')||'<div class="muted">Nobody</div>'}</div>
+  <div class="card"><h3>Admissions to follow up <button class="btn sm" onclick="go('admissions')">Open</button></h3>${leads.map(l=>`<div class="row small"><span><b>${l.n}</b> <span class="muted">${l.src}</span></span><span class="badge b-in">${l.s}</span></div>`).join('')}</div></div>`}
 
-// ---------- EXAMS ----------
-P.exams=()=>{
-  const L=studs.filter(s=>s.cls==S.cls&&s.sec==S.sec);
-  const rows=L.map(s=>{const m=S.marks[s.id],t=m.reduce((a,b)=>a+b,0);return {s,m,t,p:t/6}}).sort((a,b)=>b.t-a.t);
-  const pos={};rows.forEach((r,i)=>pos[r.s.id]=i+1);
-  return `<h2>Exams & Results</h2><div class="sub">Mid-Term 2026 · enter marks once, get grades, positions and report cards</div>
-  <div class="card"><div class="fl" style="margin-bottom:12px"><select style="width:auto"><option>Mid-Term 2026</option><option>Monthly Test – Sep</option><option>Final 2026</option></select>
-  <select style="width:auto" onchange="S.cls=this.value;render()">${CL.map(c=>`<option ${S.cls==c?'selected':''}>Class ${c}</option>`).join('').replace(/Class /g,'')}</select><select style="width:auto" onchange="S.sec=this.value;render()">${['A','B'].map(c=>`<option ${S.sec==c?'selected':''}>${c}</option>`).join('')}</select>
-  <div style="flex:1"></div><button class="btn" onclick="toast('Marks template downloaded; upload the filled Excel to import')">⬇ Excel</button></div>
-  <div class="tw"><table><tr><th>Student</th>${SUBJ.map(x=>`<th>${x}</th>`).join('')}<th class="r">Total</th><th>%</th><th>Grade</th><th>Pos</th><th></th></tr>
-  ${rows.map(r=>`<tr><td><b>${r.s.name}</b></td>${r.m.map((v,j)=>`<td><input type="number" min="0" max="100" style="width:58px;padding:4px 6px" value="${v}" onchange="S.marks['${r.s.id}'][${j}]=Math.min(100,+this.value||0);render()"></td>`).join('')}<td class="r"><b>${r.t}</b>/600</td><td>${r.p.toFixed(0)}%</td><td><span class="badge ${r.p>=80?'b-ok':r.p>=60?'b-in':'b-warn'}">${grade(r.p)}</span></td><td>${pos[r.s.id]}</td><td><button class="btn sm" onclick="repCard(${r.s.i})">Report card</button></td></tr>`).join('')}</table></div>
-  <div class="fl" style="margin-top:12px"><span class="muted small">Edit any mark: totals, grades and positions update live.</span><div style="flex:1"></div>
-   <button class="btn" onclick="toast('${L.length} report cards generated (PDF, A4)')">Generate all report cards</button><button class="btn g" onclick="toast('Results published to parents (app + WhatsApp link)')">Publish to parents</button></div></div>`};
-function repCard(i){const s=studs[i],m=S.marks[s.id],t=m.reduce((a,b)=>a+b,0),p=t/6;
-  openM(`<div class="rc"><h4>Al-Noor Grammar School</h4><div class="muted small" style="text-align:center">Mid-Term Report Card 2026 · Class ${s.cls}-${s.sec}</div><br>
-  <div class="row"><span>Name</span><b>${s.name}</b></div><div class="row"><span>Roll no / Father</span><b>${s.id} · ${s.father}</b></div>
-  <table style="margin:8px 0"><tr><th>Subject</th><th class="r">Marks</th><th class="r">Out of</th><th>Grade</th></tr>${SUBJ.map((x,j)=>`<tr><td>${x}</td><td class="r">${m[j]}</td><td class="r">100</td><td>${grade(m[j])}</td></tr>`).join('')}
-  <tr><td><b>Total</b></td><td class="r"><b>${t}</b></td><td class="r">600</td><td><b>${grade(p)}</b></td></tr></table>
-  <div class="row"><span>Percentage</span><b>${p.toFixed(1)}%</b></div><div class="row"><span>Attendance</span><b>${100-(2+s.i%7)}%</b></div>
-  <div class="small muted" style="margin-top:8px">Remarks: ${p>=80?'Excellent performance. Keep it up!':p>=60?'Good effort; can improve in weaker subjects.':'Needs extra attention; please meet the class teacher.'}</div>
-  <div class="fl" style="justify-content:space-between;margin-top:22px" ><span class="small">_________<br>Class teacher</span><span class="small">_________<br>Principal</span></div></div><br>
-  <div class="fl"><button class="btn p" onclick="toast('PDF downloaded')">Download PDF</button><button class="btn g" onclick="toast('Sent to ${s.father} on WhatsApp')">Send to parent</button></div>`)}
+// ---------- STUDENTS ----------
+P.students=()=>{
+  const q=(S.q||'').toLowerCase(),c=S.fcls||'',pg=S.spg||0,teach=S.role=='teacher';
+  const L=vs().filter(s=>(!c||s.cls==c)&&(!q||(s.name+s.father+s.id+s.phone).toLowerCase().includes(q)));
+  return `<h2>Students</h2><div class="sub">${vs().length.toLocaleString()} enrolled · siblings are linked automatically by guardian phone</div>
+  <div class="card"><div class="fl" style="margin-bottom:12px"><input id="sq" style="max-width:280px" placeholder="Search name, father, roll no, phone…" value="${S.q||''}" oninput="S.q=this.value;S.spg=0;render();const i=$('#sq');i.focus();i.setSelectionRange(99,99)">
+   <select style="width:auto" onchange="S.fcls=this.value;S.spg=0;render()"><option value="">All classes</option>${CL.map(x=>`<option ${c==x?'selected':''}>${x}</option>`).join('')}</select><div style="flex:1"></div>
+   ${teach?'':'<button class="btn" onclick="toast(\'Excel/Matrix import: upload a file, map columns, review, done\')">⬆ Import Excel</button><button class="btn p" onclick="admForm()">+ New admission</button>'}</div>
+   <div class="tw"><table><tr><th>Roll no</th><th>Student</th><th>Class</th><th>Guardian</th><th>Phone</th>${teach?'':'<th class="r">Dues</th>'}<th></th></tr>
+   ${L.slice(pg*25,pg*25+25).map(s=>`<tr class="click" onclick="prof(${s.i})"><td class="muted">${s.id}</td><td><b>${s.name}</b>${s.sib?' <span class="badge b-in">sibling</span>':''}${campTag(s)}</td><td>${s.cls}-${s.sec}</td><td>${s.father}</td><td class="muted">${s.phone}</td>${teach?'':`<td class="r">${owedOf(s)?`<span class="dn">${R(owedOf(s))}</span>`:'<span class="up">Clear</span>'}</td>`}<td>›</td></tr>`).join('')}</table></div>
+   ${pgBar(L.length,25,pg,'S.spg')}${!L.length?'<div class="muted" style="padding:20px;text-align:center">No match</div>':''}</div>`};
+function prof(i){const s=studs[i],f=FS[s.ci][s.cls],sibs=studs.filter(x=>x.sib&&x.phone==s.phone&&x.i!=i&&x.ci==s.ci),vv=(VX[i]||[]).slice().sort((a,b)=>a.mo<b.mo?1:-1),teach=S.role=='teacher';
+  const ab=2+(s.i%7);
+  openM(`<h2>${s.name}</h2><div class="muted">${s.id} · Class ${s.cls}-${s.sec} · ${CP[s.ci].short} campus · ${s.f?'Female':'Male'}</div><br>
+  <div class="grid g3"><div class="card kpi" style="margin:0"><div class="l">Attendance (Oct)</div><div class="v">${100-ab}%</div></div>
+  ${teach?'':`<div class="card kpi" style="margin:0"><div class="l">Dues</div><div class="v ${owedOf(s)?'dn':'up'}">${owedOf(s)?R(owedOf(s)):'Clear'}</div></div>`}
+  <div class="card kpi" style="margin:0"><div class="l">Last exam</div><div class="v">${Math.round(S.marks[s.id].reduce((a,b)=>a+b,0)/6)}%</div></div></div><br>
+  <div class="row"><span class="muted">Father / guardian</span><b>${s.father}</b></div><div class="row"><span class="muted">WhatsApp</span><b>${s.phone} <span class="badge b-ok">opted in</span></b></div>
+  ${sibs.length?`<div class="row"><span class="muted">Sibling</span><b>${sibs.map(x=>x.name+' ('+x.cls+')').join(', ')}</b></div>`:''}
+  <div class="row"><span class="muted">Authorised pickup</span><b>Father, Uncle (Imran), Driver Aslam</b></div>
+  ${teach?'':`<h3 style="margin:14px 0 4px;font-size:12px;color:var(--mute);text-transform:uppercase">Fee plan</h3>
+  <div class="row small"><span>Tuition (monthly)</span><b>${R(f.tuition)}</b></div>${s.van?`<div class="row small"><span>Transport (monthly)</span><b>${R(TRANSPORT)}</b></div>`:''}
+  <div class="row small"><span>Annual charges · Exam fee</span><b>${R(f.annual)} · ${R(f.exam)}</b></div>
+  ${s.sibD?`<div class="row small"><span>Sibling discount</span><b class="up">${RULE.sib}% of tuition</b></div>`:''}${s.disc?`<div class="row small"><span>${s.dt}</span><b class="up">approved by ${s.disc>=50?'Principal':'Accounts'}</b></div>`:''}
+  <h3 style="margin:14px 0 4px;font-size:12px;color:var(--mute);text-transform:uppercase">Vouchers</h3>
+  ${vv.map(v=>{const st=vStat(v);return `<div class="row small"><span>${MNAME[v.mo]} <span class="muted">${v.id}</span></span><span><b>${R(v.fee+v.fine)}</b> · paid ${R(v.paid)} <span class="badge ${st[1]}">${st[0]}</span></span></div>`}).join('')}
+  ${CR[s.i]?`<div class="demo-note">Advance credit: ${R(CR[s.i])} — adjusts against the next voucher</div>`:''}`}
+  <br><div class="fl"><button class="btn g" onclick="closeM();toast('WhatsApp chat opened with ${s.father}')">WhatsApp guardian</button>${teach?'':`<button class="btn p" onclick="closeM();S.sel=${s.i};S.tab.fees='collect';go('fees')">Collect fee</button>`}<button class="btn" onclick="toast('Student ID card PDF generated')">ID card</button></div>`)}
+function admForm(){const c=S.campus=='All Campuses'?CP[0]:cpCur();
+  openM(`<h2>New admission · ${c.short}</h2><div class="sub">Roll number AN-${2401+studs.length} will be assigned. An admission voucher (admission fee + first month) is created automatically.</div><div class="frm">
+ <div class="f"><label>Student name</label><input id="an" placeholder="e.g. Hassan Raza"></div><div class="f"><label>Class</label><select id="ac">${CL.map(x=>`<option>${x}</option>`).join('')}</select></div>
+ <div class="f"><label>B-Form number</label><input placeholder="35202-1234567-8"></div><div class="f"><label>Date of birth</label><input type="date" value="2018-03-14"></div>
+ <div class="f"><label>Father / guardian name</label><input id="af" placeholder="Father's name"></div><div class="f"><label>Father CNIC</label><input placeholder="35202-1234567-1"></div>
+ <div class="f"><label>WhatsApp number</label><input placeholder="03XX-XXXXXXX"></div><div class="f"><label>Uses school van?</label><select id="av"><option value="0">No</option><option value="1">Yes</option></select></div>
+ </div><label class="small"><input type="checkbox" checked style="width:auto"> Parent consents to WhatsApp/SMS alerts about their child</label><br><br>
+ <button class="btn p" onclick="saveAdm(${c.ci})">Admit student</button>`)}
+function saveAdm(ci){const n=$('#an').value||'New Student',cl=$('#ac').value,fa=$('#af').value||'Guardian Khan',i=studs.length;
+  const s={id:'AN-'+(2401+i),i,ci,name:n,father:fa,sur:'',cls:cl,sec:'A',f:0,van:$('#av').value=='1',phone:'0300-1234567',sib:false,sibD:false,disc:0,dt:''};
+  studs.push(s);CP[ci].last=Math.max(CP[ci].last,i+1);CP[ci].stu++;S.att[s.id]='P';S.marks[s.id]=SUBJ.map(()=>0);
+  const v=mkV(s,'2026-10',{adm:1,tr:1});recomputeCP();closeM();toast('Admitted: '+n+' · voucher '+v.id+' for '+R(v.fee)+' created · welcome sent on WhatsApp');render()}
 
-// ---------- COMMS ----------
-P.comms=()=>{
-  const t=curTab('com','new');
-  return `<h2>Messages & Diary</h2><div class="sub">One compose box → parent app, WhatsApp and SMS</div>`+tab('com',[['new','Compose'],['hist','Sent'],['out','WhatsApp outbox'],['tpl','Templates'],['chat','Parent chat',1]])+
-  ({new:comNew,hist:comHist,out:comOut,tpl:comTpl,chat:comChat}[t])()};
-function comNew(){return `<div class="grid g2"><div class="card"><h3>New message</h3>
-  <div class="f"><label>Type</label><div class="fl">${['Notice','Homework / diary','Fee reminder','Emergency'].map((x,i)=>`<span class="chip ${i==1?'on':''}" onclick="this.parentNode.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));this.classList.add('on')">${x}</span>`).join('')}</div></div>
-  <div class="f"><label>To</label><select id="cto"><option>Class 5-A (29 parents)</option><option>Class 5 (all sections)</option><option>Whole school (688 parents)</option><option>Transport – Route 2</option><option>Defaulters only</option></select></div>
-  <div class="f"><label>Message</label><textarea id="cmsg">Class 5 Math: Exercise 4.2 (Q1-8). Test on Thursday.</textarea></div>
-  <div class="f"><label>Send via</label><div class="small">☑ Parent app &nbsp; ☑ WhatsApp &nbsp; ${T()=='a'?'☑ SMS fallback':'☐ SMS fallback <span class="badge b-adv">Adv</span>'} &nbsp; ☐ Attach photo/PDF</div></div>
-  <div class="f"><label>When</label><select><option>Now</option><option>Today 2:00 pm (after school)</option>${T()=='a'?'<option>Schedule…</option>':''}</select></div>
-  <button class="btn p" onclick="comSend()">Send</button></div>
-  <div class="card"><h3>What parents see on WhatsApp</h3>${wa('📚 Homework – Class 5-A\nMath: Exercise 4.2 (Q1-8). Test on Thursday.\n– Ms. Saima Iqbal\n\nمکمل ڈائری ایپ میں دیکھیں','13:05')}</div></div>`}
-function comSend(){const to=$('#cto').value,m=$('#cmsg').value,n=parseInt(to.match(/\((\d+)/)?.[1]||40);
-  S.hist.unshift({t:m.slice(0,60),a:to.replace(/\s*\(.*/,''),ch:['App','WhatsApp'],sent:n,del:0,read:0,tm:'Just now',pend:1});
-  setTimeout(()=>{const h=S.hist.find(x=>x.pend);if(h){h.pend=0;h.del=Math.round(h.sent*.97);h.read=Math.round(h.sent*.62);if(S.page=='comms')render()}},1600);
-  S.tab.com='hist';toast('Sending to '+n+' parents…');render()}
-function comHist(){return `<div class="card"><div class="tw"><table><tr><th>Message</th><th>To</th><th>Channels</th><th>Delivered</th><th>Read</th><th>When</th></tr>${S.hist.map(h=>`<tr><td>${h.t}</td><td>${h.a}</td><td>${h.ch.map(c=>`<span class="badge b-in">${c}</span>`).join(' ')}</td><td>${h.pend?'<span class="muted">sending…</span>':h.del+'/'+h.sent}</td><td>${h.pend?'—':h.read}</td><td class="muted">${h.tm}</td></tr>`).join('')}</table></div>
-  ${T()=='b'?'<p class="small muted">Advanced I adds per-parent delivery status, automatic SMS fallback and a “not read yet” follow-up list.</p>':'<p class="small">Undelivered: 17 parents → <button class="btn sm a" onclick="toast(\'SMS sent to 17 parents\')">Send SMS fallback</button></p>'}</div>`}
-function comOut(){const L=S.log.length?S.log:['Fee reminder → 3 parents','Absent alert → Imran Khan (Hira Khan)'];return `<div class="card"><h3>Recent automatic WhatsApp messages</h3>${L.map((l,i)=>`<div class="row small"><span>${l}</span><span class="badge b-ok">Delivered ✓✓</span></div>`).join('')}</div>`}
-function comTpl(){return `<div class="grid g2">${[['Absence alert','Assalam o Alaikum {father}, {student} is absent today…'],['Fee reminder','{student}\'s fee of {amount} is due on {date}…'],['Fee receipt','Thank you. Received {amount} for {student}.'],['Pickup confirmation','{student} was picked up by {person} at {time}.']].map(x=>`<div class="card"><h3>${x[0]}<span class="badge b-ok">approved</span></h3><div class="small">${x[1]}</div><br><button class="btn sm" onclick="toast('Edit template (needs WhatsApp re-approval)')">Edit</button></div>`).join('')}</div>`}
-function comChat(){return advOnly('Parent–teacher chat & PTM scheduler','Parents message the class teacher inside the app (office hours, no personal numbers shared). Book parent-teacher meetings by slot.','<div class="card"><div class="row"><div><b>Mr. Imran Khan (Hassan 5-A)</b><div class="muted small">Why was Hassan marked late?</div></div><button class="btn sm" onclick="toast(\'Reply sent\')">Reply</button></div></div>')}
+// ---------- FEES ----------
+P.fees=()=>{
+  const t=curTab('fees','collect');
+  return `<h2>Fees</h2><div class="sub">Collect, vouchers, defaulters, day close, reports and fee structure · ${S.campus=='All Campuses'?'all campuses':S.campus}</div>`+
+  tab('fees',[['collect','Collect'],['vouch','Vouchers'],['gen','Generate'],['def','Defaulters'],['day','Day close'],['rep','Reports'],['online','Online payments',1],['struct','Fee structure']])+
+  ({collect:feeCollect,vouch:feeVouch,gen:feeGen,def:feeDef,day:feeDay,rep:feeRep,online:feeOnline,struct:feeStruct}[t])()};
+
+// ---- collect ----
+function feeCollect(){
+  const s=S.sel!=null?studs[S.sel]:null,q=(S.fq||'').toLowerCase();
+  const res=q.length>1?vs().filter(x=>(x.name+x.father+x.id+x.phone).toLowerCase().includes(q)).slice(0,8):[];
+  const td=PAY.filter(p=>p.date==TODAY_ISO&&inScope(p.ci)),cash=td.filter(p=>p.m=='Cash').reduce((a,p)=>a+p.amt,0),tt=td.reduce((a,p)=>a+p.amt,0);
+  return `<div class="grid g2"><div><div class="card"><h3>Find student</h3><input id="fq" placeholder="Type name, father, roll no or phone…" value="${S.fq||''}" oninput="S.fq=this.value;S.sel=null;render();const e=$('#fq');e.focus();e.setSelectionRange(99,99)">
+   <div style="margin-top:8px">${res.map(x=>`<div class="row click" style="cursor:pointer" onclick="S.sel=${x.i};render()"><span><b>${x.name}</b> <span class="muted small">${x.id} · ${x.cls}-${x.sec} · ${x.father}</span>${campTag(x)}</span>${owedOf(x)?`<b class="dn">${R(owedOf(x))}</b>`:'<span class="badge b-ok">Clear</span>'}</div>`).join('')}</div>
+   ${!s&&!res.length?'<p class="muted small">Tip: type 2+ letters of the student, father or phone. Siblings are linked so one visit clears all.</p>':''}</div>
+   <div class="card"><h3>Today's desk</h3><div class="row"><span>Receipts issued</span><b>${td.length}</b></div><div class="row"><span>Cash in drawer</span><b>${R(cash)}</b></div><div class="row"><span>Bank / wallet</span><b>${R(tt-cash)}</b></div></div></div>
+   <div>${s?feeSlip(s):'<div class="card muted" style="text-align:center;padding:40px">Select a student to see their open vouchers</div>'}</div></div>`}
+function feeSlip(s){
+  const open=(VX[s.i]||[]).filter(v=>vBal(v)>0).sort((a,b)=>a.mo<b.mo?-1:1),o=owedOf(s),sibs=studs.filter(x=>x.sib&&x.phone==s.phone&&x.ci==s.ci&&x.i!=s.i&&owedOf(x)>0);
+  return `<div class="card"><h3>${s.name}${campTag(s)}</h3><div class="muted small" style="margin-bottom:8px">${s.id} · Class ${s.cls}-${s.sec} · ${s.father} · ${s.phone}</div>
+  ${open.map(v=>{const st=vStat(v);return `<div style="border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px"><div class="row small" style="padding:2px 0"><b>${MNAME[v.mo]} · ${v.id}</b><span><span class="badge ${st[1]}">${st[0]}</span> due ${fd(v.due)}</span></div>
+   ${v.lines.map(l=>`<div class="row small" style="padding:3px 0"><span>${l[0]}</span><span class="${l[1]<0?'up':''}">${l[1]<0?'−':''}${R(Math.abs(l[1]))}</span></div>`).join('')}
+   ${v.fine?`<div class="row small" style="padding:3px 0"><span>Late fine</span><span class="dn">${R(v.fine)} <a href="#" onclick="waiveFine('${v.id}');return false">waive</a></span></div>`:''}
+   ${v.paid?`<div class="row small" style="padding:3px 0"><span>Already paid</span><span class="up">−${R(v.paid)}</span></div>`:''}
+   <div class="row small" style="padding:3px 0"><b>Balance</b><b>${R(vBal(v))}</b></div></div>`}).join('')||'<div class="badge b-ok" style="margin:8px 0">No dues — all vouchers paid</div>'}
+  ${CR[s.i]?`<div class="demo-note">Advance credit on file: ${R(CR[s.i])}</div>`:''}
+  ${open.length?`<div class="row" style="font-size:17px"><b>Total payable</b><b>${R(o)}</b></div>
+  ${sibs.length?`<div class="demo-note">Sibling ${sibs[0].name} also owes ${R(owedOf(sibs[0]))}. <a href="#" onclick="S.sel=${sibs[0].i};render();return false">Open sibling</a></div>`:''}
+  <div class="f"><label>Payment method</label><div class="pill-in" id="pms">${METHODS.map((m,i)=>`<span class="pm ${i?'':'on'}" onclick="document.querySelectorAll('#pms .pm').forEach(x=>x.classList.remove('on'));this.classList.add('on')">${m}</span>`).join('')}</div></div>
+  <div class="f"><label>Amount received (part payments allowed · applied to oldest voucher first)</label><input id="amt" type="number" value="${o}" oninput="allocPrev(${s.i})"></div>
+  <div class="small muted" id="alloc"></div><br>
+  <button class="btn g" onclick="doPay(${s.i})">Receive payment & print receipt</button>`:''}</div>`}
+function allocPrev(i){const s=studs[i];let left=+$('#amt').value||0;const out=[];
+  (VX[i]||[]).filter(v=>vBal(v)>0).sort((a,b)=>a.mo<b.mo?-1:1).forEach(v=>{if(left<=0)return;const a=Math.min(left,vBal(v));left-=a;out.push(`${MNAME[v.mo]}: ${R(a)}`)});
+  $('#alloc').textContent=out.length?'Applied to → '+out.join(' · ')+(left>0?' · advance credit '+R(left):''):''}
+function doPay(i){const s=studs[i],a=+$('#amt').value||0,m=document.querySelector('#pms .pm.on').textContent;
+  if(a<=0)return toast('Enter an amount');
+  const p=addPay(s,a,m,TODAY_ISO,S.role=='accounts'?'Accounts':'Owner/Principal');recomputeCP();
+  const bal=owedOf(s);
+  openM(`<div class="receipt"><h4>Al-Noor Grammar School · ${CP[s.ci].short}</h4><div class="c">Fee receipt ${p.id} · ${TODAY}</div>
+  <div class="row"><span>Student</span><b>${s.name} (${s.id})</b></div><div class="row"><span>Class</span><b>${s.cls}-${s.sec}</b></div><div class="row"><span>Method</span><b>${m}</b></div>
+  ${p.al.map(x=>`<div class="row small"><span>Against ${MNAME[x[1]]} voucher</span><b>${R(x[2])}</b></div>`).join('')}${p.credit?`<div class="row small"><span>Advance credit</span><b>${R(p.credit)}</b></div>`:''}
+  <div class="row"><span>Received</span><b>${R(a)}</b></div><div class="row"><span>Balance</span><b class="${bal>0?'dn':'up'}">${bal>0?R(bal):'Nil'}</b></div><div class="c" style="margin-top:8px">Thank you · Computer generated receipt</div></div><br>
+  <div class="fl"><button class="btn p" onclick="toast('Sent to printer (thermal 80mm)')">🖨 Print</button><button class="btn g" onclick="toast('Receipt sent to ${s.father} on WhatsApp');closeM()">Send on WhatsApp</button><button class="btn" onclick="closeM()">Done</button></div>`);render()}
+function waiveFine(id){const v=VM[id],s=sOf(v);
+  if(feeRole()){doWaive(id);return}
+  S.apid=(S.apid||10)+1;S.appr.push({id:S.apid,t:'Late fine waiver – '+s.name,d:R(v.fine)+' on voucher '+v.id,who:'Accounts',vid:id});toast('Sent to the principal for approval')}
+function doWaive(id){const v=VM[id];v.fine=0;v.waived=true;recomputeCP();toast('Late fine waived on '+v.id);render()}
+
+// ---- voucher register ----
+function feeVouch(){
+  const f=S.vf||(S.vf={mo:'2026-10',st:'',cls:'',q:'',pg:0}),months=[...new Set(V.map(v=>v.mo))].sort(),q=f.q.toLowerCase();
+  const base=V.filter(v=>inScope(v.ci)&&(!f.mo||v.mo==f.mo)&&(!f.cls||sOf(v).cls==f.cls)&&(!q||(sOf(v).name+sOf(v).id+v.id).toLowerCase().includes(q)));
+  const cnt={paid:0,part:0,unpaid:0,over:0,canc:0};base.forEach(v=>cnt[vKey(v)]++);
+  const live=base.filter(v=>!v.cancelled),billed=live.reduce((a,v)=>a+v.fee+v.fine,0),got=live.reduce((a,v)=>a+v.paid,0);
+  const L=base.filter(v=>!f.st||vKey(v)==f.st);
+  return `<div class="grid g4" style="margin-bottom:14px"><div class="card kpi"><div class="l">Vouchers</div><div class="v">${live.length.toLocaleString()}</div></div><div class="card kpi"><div class="l">Billed (incl. fines)</div><div class="v">${Mn(billed)}</div></div><div class="card kpi"><div class="l">Received</div><div class="v up">${Mn(got)}</div></div><div class="card kpi"><div class="l">Outstanding</div><div class="v dn">${Mn(billed-got)}</div></div></div>
+  <div class="card"><div class="fl" style="margin-bottom:10px"><input id="vq" style="max-width:240px" placeholder="Search student, roll no, voucher no…" value="${f.q}" oninput="S.vf.q=this.value;S.vf.pg=0;render();const e=$('#vq');e.focus();e.setSelectionRange(99,99)">
+   <select style="width:auto" onchange="S.vf.mo=this.value;S.vf.pg=0;render()"><option value="">All months</option>${months.map(m=>`<option value="${m}" ${f.mo==m?'selected':''}>${MNAME[m]}</option>`).join('')}</select>
+   <select style="width:auto" onchange="S.vf.cls=this.value;S.vf.pg=0;render()"><option value="">All classes</option>${CL.map(x=>`<option ${f.cls==x?'selected':''}>${x}</option>`).join('')}</select>
+   <div style="flex:1"></div><button class="btn sm" onclick="dlCSV('vouchers-${f.mo||'all'}',[['Voucher','Roll no','Student','Class','Month','Total','Paid','Balance','Due','Status']].concat(${JSON.stringify(L.slice(0,5000).map(v=>[v.id,sOf(v).id,sOf(v).name,sOf(v).cls,MNAME[v.mo],v.fee+v.fine,v.paid,vBal(v),v.due,vStat(v)[0]]))}))">⬇ Export Excel</button></div>
+   <div class="fl" style="margin-bottom:10px">${[['','All'],['unpaid','Unpaid'],['part','Partial'],['over','Overdue'],['paid','Paid'],['canc','Cancelled']].map(([k,l])=>`<span class="chip ${f.st==k?'on':''}" onclick="S.vf.st='${k}';S.vf.pg=0;render()">${l}${k?' ('+cnt[k]+')':' ('+base.length+')'}</span>`).join('')}</div>
+   <div class="tw"><table><tr><th>Voucher</th><th>Student</th><th>Class</th><th>Month</th><th class="r">Total</th><th class="r">Paid</th><th class="r">Balance</th><th>Due</th><th>Status</th></tr>
+   ${L.slice(f.pg*25,f.pg*25+25).map(v=>{const s=sOf(v),st=vStat(v);return `<tr class="click" onclick="vModal('${v.id}')"><td class="muted">${v.id}</td><td><b>${s.name}</b>${campTag(s)}</td><td>${s.cls}-${s.sec}</td><td>${MNAME[v.mo]}</td><td class="r">${R(v.fee+v.fine)}</td><td class="r">${R(v.paid)}</td><td class="r ${vBal(v)?'dn':''}">${R(vBal(v))}</td><td>${fd(v.due)}</td><td><span class="badge ${st[1]}">${st[0]}</span></td></tr>`}).join('')}</table></div>
+   ${pgBar(L.length,25,f.pg,'S.vf.pg')}</div>`}
+function vModal(id){const v=VM[id],s=sOf(v),st=vStat(v),pays=PAY.filter(p=>p.sid==v.sid&&p.al.some(a=>a[0]==id));
+  openM(`<h2>Voucher ${v.id}</h2><div class="sub">${s.name} · ${s.id} · Class ${s.cls}-${s.sec} · ${CP[s.ci].short} · ${MNAME[v.mo]} · due ${fd(v.due)} <span class="badge ${st[1]}">${st[0]}</span></div>
+  <div class="receipt">${v.lines.map(l=>`<div class="row small"><span>${l[0]}</span><span class="${l[1]<0?'up':''}">${l[1]<0?'−':''}${R(Math.abs(l[1]))}</span></div>`).join('')}
+  ${v.fine?`<div class="row small"><span>Late fine</span><span class="dn">${R(v.fine)}</span></div>`:''}${v.credit?`<div class="row small"><span>Adjusted from advance credit</span><span class="up">−${R(v.credit)}</span></div>`:''}
+  <div class="row"><b>Total</b><b>${R(v.fee+v.fine)}</b></div><div class="row"><span>Paid</span><b class="up">${R(v.paid)}</b></div><div class="row"><b>Balance</b><b class="${vBal(v)?'dn':'up'}">${R(vBal(v))}</b></div></div>
+  ${pays.length?`<h3 style="margin:12px 0 4px;font-size:12px;color:var(--mute);text-transform:uppercase">Payments</h3>${pays.map(p=>`<div class="row small"><span>${fd(p.date)} · ${p.id} · ${p.m}</span><b>${R(p.al.filter(a=>a[0]==id).reduce((a,x)=>a+x[2],0))}</b></div>`).join('')}`:''}
+  <br><div class="fl">${vBal(v)?`<button class="btn p" onclick="closeM();S.sel=${s.i};S.tab.fees='collect';render()">Collect</button>`:''}${v.fine?`<button class="btn" onclick="closeM();waiveFine('${v.id}')">Waive fine</button>`:''}
+  <button class="btn" onclick="toast('Voucher PDF sent to printer')">🖨 Print</button><button class="btn g" onclick="toast('Voucher sent to ${s.father} on WhatsApp')">WhatsApp</button>
+  ${!v.cancelled&&!v.paid?`<button class="btn" onclick="cancelV('${v.id}')">Cancel voucher</button>`:''}${v.cancelled?`<button class="btn a" onclick="reissueV('${v.id}')">Reissue voucher</button>`:''}</div>`)}
+function cancelV(id){VM[id].cancelled=true;recomputeCP();closeM();toast('Voucher '+id+' cancelled');render()}
+function reissueV(id){const v=VM[id],s=sOf(v);v.lines=vLines(s,{tr:1});v.fee=v.lines.reduce((a,l)=>a+l[1],0);v.cancelled=false;recomputeCP();closeM();toast('Voucher '+id+' reissued with the current fee plan: '+R(v.fee));render()}
+
+// ---- generate ----
+function feeGen(){
+  const g=S.gen||(S.gen={mo:'2026-11',camp:S.campus=='All Campuses'?'all':S.campus,cls:'',tr:1,an:0,ex:0,ml:'',ma:0,due:''});
+  if(S.campus!='All Campuses')g.camp=S.campus;
+  const due=g.due||dueIso(g.mo),tgt=studs.filter(s=>(g.camp=='all'||CP[s.ci].n==g.camp)&&(!g.cls||s.cls==g.cls));
+  const fresh=tgt.filter(s=>!(VX[s.i]||[]).some(v=>v.mo==g.mo&&!v.cancelled)),o={tr:g.tr,an:g.an,ex:g.ex,misc:[g.ml,g.ma]};
+  const total=fresh.reduce((a,s)=>a+vLines(s,o).reduce((x,l)=>x+l[1],0),0),smp=fresh[0]||tgt[0],sl=smp?vLines(smp,o):[];
+  return `<div class="grid g2"><div class="card"><h3>Generate vouchers</h3>
+  <div class="f"><label>Month</label><select onchange="S.gen.mo=this.value;S.gen.due='';render()">${['2026-10','2026-11','2026-12'].map(m=>`<option value="${m}" ${g.mo==m?'selected':''}>${MNAME[m]}${V.some(v=>v.mo==m)?' (already generated)':''}</option>`).join('')}</select></div>
+  <div class="f"><label>Campus</label>${S.campus=='All Campuses'?`<select onchange="S.gen.camp=this.value;render()"><option value="all" ${g.camp=='all'?'selected':''}>All campuses</option>${CP.map(c=>`<option ${g.camp==c.n?'selected':''}>${c.n}</option>`).join('')}</select>`:`<input value="${S.campus}" disabled>`}</div>
+  <div class="f"><label>Classes</label><select onchange="S.gen.cls=this.value;render()"><option value="">All classes</option>${CL.map(c=>`<option value="${c}" ${g.cls==c?'selected':''}>Class ${c}</option>`).join('')}</select></div>
+  <div class="f"><label>Due date</label><input type="date" value="${due}" onchange="S.gen.due=this.value"></div>
+  <div class="f"><label>Fee heads to include</label><div class="small">☑ Tuition (always) · sibling discount & scholarships applied automatically<br>
+   <label><input type="checkbox" style="width:auto" ${g.tr?'checked':''} onchange="S.gen.tr=this.checked?1:0;render()"> Transport (van students)</label> ·
+   <label><input type="checkbox" style="width:auto" ${g.an?'checked':''} onchange="S.gen.an=this.checked?1:0;render()"> Annual charges</label> ·
+   <label><input type="checkbox" style="width:auto" ${g.ex?'checked':''} onchange="S.gen.ex=this.checked?1:0;render()"> Exam fee</label></div></div>
+  <div class="frm"><div class="f"><label>Extra charge (optional)</label><input placeholder="e.g. Picnic fund" value="${g.ml}" onchange="S.gen.ml=this.value;render()"></div><div class="f"><label>Amount</label><input type="number" value="${g.ma}" onchange="S.gen.ma=+this.value;render()"></div></div>
+  <div class="demo-note">${fresh.length} new voucher${fresh.length==1?'':'s'} · ${R(total)} total${tgt.length-fresh.length?` · ${tgt.length-fresh.length} students skipped (already have a ${MNAME[g.mo]} voucher)`:''}. Old unpaid vouchers stay open and are collected oldest-first. Advance credit is applied automatically.</div>
+  <button class="btn p" ${fresh.length?'':'disabled'} onclick="genV()">Generate ${fresh.length.toLocaleString()} vouchers</button></div>
+  <div><div class="card"><h3>Sample voucher ${smp?'· '+smp.name:''}</h3>${smp?`<div class="receipt"><h4>Al-Noor Grammar School · ${CP[smp.ci].short}</h4><div class="c">Fee voucher · ${MNAME[g.mo]} · Due ${fd(due)}</div>
+   <div class="row small"><span>${smp.name} · ${smp.id} · Class ${smp.cls}-${smp.sec}</span></div>${sl.map(l=>`<div class="row small"><span>${l[0]}</span><b>${l[1]<0?'−':''}${R(Math.abs(l[1]))}</b></div>`).join('')}
+   <div class="row"><b>Payable</b><b>${R(sl.reduce((a,l)=>a+l[1],0))}</b></div><div class="small muted">1Bill PSID 1001 26${smp.id.slice(3)} · Raast QR · JazzCash / Easypaisa → 1Bill</div>
+   <div style="height:34px;background:repeating-linear-gradient(90deg,var(--ink) 0 2px,transparent 2px 5px);margin-top:8px;opacity:.7"></div></div>`:'<div class="muted">No students match</div>'}</div>
+  <div class="card"><h3>Generation log</h3><div class="tw"><table><tr><th>When</th><th>Month</th><th>Scope</th><th class="r">Vouchers</th><th class="r">Total</th><th></th></tr>
+   ${BATCHES.slice().reverse().map(b=>`<tr><td class="small">${b.at}</td><td>${MNAME[b.mo]}</td><td class="small">${b.scope}${b.cls!='All classes'?' · '+b.cls:''}</td><td class="r">${b.n.toLocaleString()}</td><td class="r">${Mn(b.total)}</td><td><button class="btn sm" onclick="S.vf={mo:'${b.mo}',st:'',cls:'',q:'',pg:0};S.tab.fees='vouch';render()">View</button></td></tr>`).join('')}</table></div></div></div></div>`}
+function genV(){const g=S.gen,due=g.due||dueIso(g.mo),o={tr:g.tr,an:g.an,ex:g.ex,misc:[g.ml,g.ma]};
+  const fresh=studs.filter(s=>(g.camp=='all'||CP[s.ci].n==g.camp)&&(!g.cls||s.cls==g.cls)&&!(VX[s.i]||[]).some(v=>v.mo==g.mo&&!v.cancelled));
+  let tot=0,cr=0;fresh.forEach(s=>{const v=mkV(s,g.mo,o,due);tot+=v.fee;if(CR[s.i]>0){const a=Math.min(CR[s.i],v.fee);v.paid+=a;v.credit=a;CR[s.i]-=a;cr+=a}});
+  BATCHES.push({id:'B-'+(BATCHES.length+1),mo:g.mo,scope:g.camp=='all'?'All campuses':g.camp.replace(' Campus',''),cls:g.cls?'Class '+g.cls:'All classes',n:fresh.length,total:tot,at:'12 Oct 2026, '+new Date().toTimeString().slice(0,5)});
+  recomputeCP();S.vf={mo:g.mo,st:'',cls:'',q:'',pg:0};
+  openM(`<h2>✓ ${fresh.length.toLocaleString()} vouchers generated</h2><div class="sub">${MNAME[g.mo]} · ${R(tot)} billed · due ${fd(due)}${cr?` · ${R(cr)} advance credit applied`:''}</div>
+  <p class="small">They are now in the Voucher register as <b>Unpaid</b>, count towards "fees still to receive" on the dashboards, and are collected from the Collect tab or marked paid when a payment arrives.</p>
+  <div class="fl"><button class="btn p" onclick="closeM();S.tab.fees='vouch';render()">Open voucher register</button><button class="btn" onclick="toast('Print queue: ${fresh.length} vouchers, 3-up A4')">🖨 Print all</button><button class="btn g" onclick="toast('Voucher PDFs sent on WhatsApp to ${fresh.length} parents')">WhatsApp PDFs</button><button class="btn" onclick="toast('Published to parent app')">Parent app</button></div>`);render()}
+
+// ---- defaulters ----
+function defRows(){return vs().map(s=>{const ov=(VX[s.i]||[]).filter(vOver);if(!ov.length)return null;
+  const bal=ov.reduce((a,v)=>a+vBal(v),0),old=ov.reduce((m,v)=>v.due<m?v.due:m,'9999'),days=Math.round((Date.parse(TODAY_ISO)-Date.parse(old))/864e5);
+  return{s,bal,days,mos:ov.map(v=>MNAME[v.mo].slice(0,3)).join(', ')}}).filter(Boolean).sort((a,b)=>b.bal-a.bal)}
+function feeDef(){const all=defRows(),b=S.dfb||'',pg=S.dpg||0;
+  const bk=r=>r.days<=30?'1':r.days<=60?'2':'3',B={'1':[0,0],'2':[0,0],'3':[0,0]};all.forEach(r=>{B[bk(r)][0]++;B[bk(r)][1]+=r.bal});
+  const L=all.filter(r=>!b||bk(r)==b);window.dsel=window.dsel||[];
+  return `<div class="grid g4" style="margin-bottom:14px"><div class="card kpi"><div class="l">Overdue students</div><div class="v dn">${all.length}</div><div class="d muted">${Mn(all.reduce((a,r)=>a+r.bal,0))} overdue</div></div>
+  ${[['1','1–30 days overdue'],['2','31–60 days'],['3','60+ days']].map(([k,l])=>`<div class="card kpi"><div class="l">${l}</div><div class="v">${B[k][0]}</div><div class="d muted">${Mn(B[k][1])}</div></div>`).join('')}</div>
+  <div class="card"><div class="fl" style="margin-bottom:10px">${[['','All ('+all.length+')'],['1','1–30 days'],['2','31–60 days'],['3','60+ days']].map(([k,l])=>`<span class="chip ${b==k?'on':''}" onclick="S.dfb='${k}';S.dpg=0;render()">${l}</span>`).join('')}<div style="flex:1"></div>
+   <button class="btn sm" onclick="dlCSV('defaulters',[['Roll no','Student','Class','Guardian','Phone','Overdue months','Days overdue','Overdue amount']].concat(${JSON.stringify(L.slice(0,5000).map(r=>[r.s.id,r.s.name,r.s.cls+'-'+r.s.sec,r.s.father,r.s.phone,r.mos,r.days,r.bal]))}))">⬇ Export Excel</button>
+   <button class="btn g" onclick="remind(dsel.length?dsel.slice():[${L.slice(0,3).map(r=>r.s.i)}])">WhatsApp ${'selected'}</button>
+   <button class="btn" onclick="remind([${L.slice(0,200).map(r=>r.s.i)}],${L.length})">WhatsApp all ${L.length}</button></div>
+   <div class="tw"><table><tr><th></th><th>Student</th><th>Class</th><th>Guardian</th><th>Overdue for</th><th>Last reminded</th><th class="r">Amount</th></tr>
+   ${L.slice(pg*20,pg*20+20).map(r=>`<tr><td><input type="checkbox" style="width:auto" ${dsel.includes(r.s.i)?'checked':''} onchange="this.checked?dsel.push(${r.s.i}):dsel.splice(dsel.indexOf(${r.s.i}),1)"></td><td><b>${r.s.name}</b>${campTag(r.s)}</td><td>${r.s.cls}-${r.s.sec}</td><td>${r.s.father}</td><td><span class="badge ${r.days>60?'b-bad':r.days>30?'b-bad':'b-warn'}">${r.mos}</span> <span class="muted small">${r.days}d</span></td><td class="small muted">${S.rem&&S.rem[r.s.i]?S.rem[r.s.i]:'—'}</td><td class="r"><b>${R(r.bal)}</b></td></tr>`).join('')}</table></div>
+   ${pgBar(L.length,20,pg,'S.dpg')}</div>`}
+function remind(ids,total){const L=ids.map(i=>studs[i]),n=total||L.length;S.rem=S.rem||{};
+  openM(`<h2>WhatsApp fee reminder</h2><div class="sub">${n} parent${n>1?'s':''} selected</div>${wa(`السلام علیکم ${L[0].father} صاحب،\n${L[0].name} کی فیس ${R(owedOf(L[0]))} واجب الادا ہے۔ براہ کرم جلد ادا کر دیں۔\n\nAssalam o Alaikum ${L[0].father} sahib, ${L[0].name}'s fee of ${R(owedOf(L[0]))} is pending. Pay via 1Bill PSID 1001 26${L[0].id.slice(3)}, JazzCash/Easypaisa or at school.\n– Al-Noor Grammar School`,'09:30')}
+  ${T()=='a'?'<p class="small muted">Advanced: auto-fallback to SMS if not delivered in 1 hour; reminder repeats every 5 days until paid.</p>':'<p class="small muted">Basic: sent once now. <span class="badge b-adv">Adv</span> adds scheduled repeats and SMS fallback.</p>'}
+  <br><button class="btn g" onclick="remDone([${ids}],${n})">Send now</button>`)}
+function remDone(ids,n){S.rem=S.rem||{};ids.forEach(i=>S.rem[i]='12 Oct');S.log.unshift('Fee reminder → '+n+' parent'+(n>1?'s':''));closeM();toast('Sent '+n+' WhatsApp reminder'+(n>1?'s':''));render()}
+
+// ---- day close ----
+function feeDay(){S.closed=S.closed||{};const all=S.campus=='All Campuses',td=PAY.filter(p=>p.date==TODAY_ISO&&inScope(p.ci)),by={};METHODS.forEach(m=>by[m]=0);td.forEach(p=>by[p.m]+=p.amt);
+  const tt=td.reduce((a,p)=>a+p.amt,0),key=S.campus+TODAY_ISO,cnt=S.cashCount,diff=cnt===''||cnt==null?null:(+cnt)-by.Cash;
+  return `<div class="grid g2"><div><div class="card"><h3>Today's collection · ${TODAY}</h3><div class="grid g3" style="margin-bottom:10px"><div class="kpi"><div class="l">Receipts</div><div class="v">${td.length}</div></div><div class="kpi"><div class="l">Total</div><div class="v">${Mn(tt)}</div></div><div class="kpi"><div class="l">Cash expected</div><div class="v">${Mn(by.Cash)}</div></div></div>
+   ${METHODS.map(m=>`<div class="row small"><span>${m}</span><b>${R(by[m])}</b></div>`).join('')}<div class="row"><b>Total</b><b>${R(tt)}</b></div></div>
+   ${all?`<div class="card"><h3>By campus</h3>${CP.map(c=>{const t=PAY.filter(p=>p.date==TODAY_ISO&&p.ci==c.ci).reduce((a,p)=>a+p.amt,0);return `<div class="row small"><span>${c.short}</span><span><b>${R(t)}</b> <span class="badge ${S.closed[c.n+TODAY_ISO]?'b-ok':'b-warn'}">${S.closed[c.n+TODAY_ISO]?'Closed':'Open'}</span></span></div>`}).join('')}</div>`:`<div class="card"><h3>Close the day</h3>
+   ${S.closed[key]?`<div class="badge b-ok" style="margin-bottom:8px">Day closed ✓ ${S.closed[key]}</div>`:`<div class="f"><label>Cash counted in drawer</label><input type="number" id="cc" value="${cnt==null?'':cnt}" onchange="S.cashCount=this.value;render()" placeholder="Count the cash and enter it"></div>
+   ${diff==null?'':`<div class="row"><span>Difference</span><b class="${diff==0?'up':'dn'}">${diff==0?'Matches ✓':(diff>0?'+':'−')+R(Math.abs(diff))}</b></div>`}
+   <br><button class="btn p" onclick="closeDay('${key}')">Close day & send report</button>`}</div>`}</div>
+  <div class="card"><h3>Receipts today</h3><div class="tw"><table><tr><th>Receipt</th><th>Student</th><th>Method</th><th class="r">Amount</th></tr>
+   ${td.slice(-15).reverse().map(p=>`<tr><td class="muted">${p.id}</td><td>${studs[p.sid].name}</td><td>${p.m}</td><td class="r">${R(p.amt)}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">No receipts yet</td></tr>'}</table></div></div></div>`}
+
+function closeDay(k){S.closed[k]='at '+new Date().toTimeString().slice(0,5)+(S.cashCount===''||S.cashCount==null?'':' · counted '+R(+S.cashCount));S.cashCount=null;toast('Day closed. Report sent to the principal');render()}
+
+// ---- reports ----
+function feeRep(){const r=S.rp||(S.rp={t:'coll',mo:'2026-10',q:''}),types=[['coll','Collection by day'],['cls','By class'],['camp','By campus'],['disc','Discounts & scholarships'],['led','Student ledger']];
+  const mo=r.mo,mv=V.filter(v=>v.mo==mo&&!v.cancelled&&inScope(v.ci));let body='',rows=[],name='report';
+  if(r.t=='coll'){const days={};PAY.filter(p=>p.date.startsWith(mo)&&inScope(p.ci)).forEach(p=>{const d=days[p.date]=days[p.date]||{n:0,t:0};d.n++;d.t+=p.amt;d[p.m]=(d[p.m]||0)+p.amt});
+    const ks=Object.keys(days).sort(),T_={n:0,t:0};METHODS.forEach(m=>T_[m]=0);ks.forEach(k=>{T_.n+=days[k].n;T_.t+=days[k].t;METHODS.forEach(m=>T_[m]+=days[k][m]||0)});
+    rows=[['Date','Receipts'].concat(METHODS,['Total'])].concat(ks.map(k=>[k,days[k].n].concat(METHODS.map(m=>days[k][m]||0),[days[k].t])),[['Total',T_.n].concat(METHODS.map(m=>T_[m]),[T_.t])]);name='collection-'+mo;
+    body=`<table><tr><th>Date</th><th class="r">Receipts</th>${METHODS.map(m=>`<th class="r">${m}</th>`).join('')}<th class="r">Total</th></tr>${ks.map(k=>`<tr><td>${fd(k)}</td><td class="r">${days[k].n}</td>${METHODS.map(m=>`<td class="r">${R(days[k][m]||0)}</td>`).join('')}<td class="r"><b>${R(days[k].t)}</b></td></tr>`).join('')}
+    <tr style="font-weight:700"><td>Total</td><td class="r">${T_.n}</td>${METHODS.map(m=>`<td class="r">${R(T_[m])}</td>`).join('')}<td class="r">${R(T_.t)}</td></tr></table>`}
+  if(r.t=='cls'||r.t=='camp'){const key=r.t=='cls'?(v=>sOf(v).cls):(v=>CP[v.ci].short),labs=r.t=='cls'?CL:CP.map(c=>c.short),m={};labs.forEach(l=>m[l]={n:0,b:0,p:0});
+    mv.forEach(v=>{const k=m[key(v)];k.n++;k.b+=v.fee+v.fine;k.p+=v.paid});
+    rows=[[r.t=='cls'?'Class':'Campus','Vouchers','Billed','Received','Outstanding','Collection %']].concat(labs.map(l=>[l,m[l].n,m[l].b,m[l].p,m[l].b-m[l].p,m[l].b?Math.round(m[l].p/m[l].b*100):0]));name=r.t+'-'+mo;
+    const tb=labs.reduce((a,l)=>a+m[l].b,0),tp=labs.reduce((a,l)=>a+m[l].p,0);
+    body=`<table><tr><th>${r.t=='cls'?'Class':'Campus'}</th><th class="r">Vouchers</th><th class="r">Billed</th><th class="r">Received</th><th class="r">Outstanding</th><th>Collection</th></tr>${labs.filter(l=>m[l].n).map(l=>{const p=m[l].b?Math.round(m[l].p/m[l].b*100):0;return `<tr><td><b>${r.t=='cls'?'Class '+l:l}</b></td><td class="r">${m[l].n}</td><td class="r">${R(m[l].b)}</td><td class="r">${R(m[l].p)}</td><td class="r dn">${R(m[l].b-m[l].p)}</td><td style="min-width:120px"><div class="bar"><i style="width:${p}%"></i></div><span class="small">${p}%</span></td></tr>`}).join('')}
+    <tr style="font-weight:700"><td>Total</td><td class="r">${mv.length}</td><td class="r">${R(tb)}</td><td class="r">${R(tp)}</td><td class="r dn">${R(tb-tp)}</td><td>${tb?Math.round(tp/tb*100):0}%</td></tr></table>`}
+  if(r.t=='disc'){const m={};mv.forEach(v=>v.lines.filter(l=>l[1]<0).forEach(l=>{const k=l[0],d=m[k]=m[k]||{n:0,a:0};d.n++;d.a+=-l[1]}));const ks=Object.keys(m).sort((a,b)=>m[b].a-m[a].a);
+    rows=[['Type','Students','Amount given']].concat(ks.map(k=>[k,m[k].n,m[k].a]));name='discounts-'+mo;
+    body=`<table><tr><th>Discount / scholarship</th><th class="r">Students</th><th class="r">Amount given</th></tr>${ks.map(k=>`<tr><td>${k}</td><td class="r">${m[k].n}</td><td class="r">${R(m[k].a)}</td></tr>`).join('')}<tr style="font-weight:700"><td>Total</td><td class="r">${ks.reduce((a,k)=>a+m[k].n,0)}</td><td class="r">${R(ks.reduce((a,k)=>a+m[k].a,0))}</td></tr></table>`}
+  if(r.t=='led'){const q=(r.q||'').toLowerCase(),res=q.length>1?vs().filter(x=>(x.name+x.father+x.id).toLowerCase().includes(q)).slice(0,6):[],s=r.sid!=null?studs[r.sid]:null;
+    if(s){const ev=[];(VX[s.i]||[]).forEach(v=>{if(!v.cancelled)ev.push([v.mo+'-01','Voucher '+v.id+' · '+MNAME[v.mo],v.fee+v.fine,0])});PAY.filter(p=>p.sid==s.i).forEach(p=>ev.push([p.date,'Receipt '+p.id+' · '+p.m,0,p.amt]));
+      ev.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:(a[2]?-1:1));let bal=0;const L=ev.map(e=>{bal+=e[2]-e[3];return e.concat([bal])});
+      rows=[['Date','Entry','Charged','Paid','Balance']].concat(L.map(e=>[e[0],e[1],e[2],e[3],e[4]]));name='ledger-'+s.id;
+      body=`<div class="sub"><b>${s.name}</b> · ${s.id} · Class ${s.cls}-${s.sec}</div><table><tr><th>Date</th><th>Entry</th><th class="r">Charged</th><th class="r">Paid</th><th class="r">Balance</th></tr>${L.map(e=>`<tr><td>${fd(e[0])}</td><td>${e[1]}</td><td class="r">${e[2]?R(e[2]):''}</td><td class="r up">${e[3]?R(e[3]):''}</td><td class="r"><b>${R(e[4])}</b></td></tr>`).join('')}</table>`}
+    else body=`<div class="f"><label>Find student</label><input id="lq" value="${r.q||''}" placeholder="Name, roll no or father…" oninput="S.rp.q=this.value;render();const e=$('#lq');e.focus();e.setSelectionRange(99,99)"></div>${res.map(x=>`<div class="row click" style="cursor:pointer" onclick="S.rp.sid=${x.i};render()"><span><b>${x.name}</b> <span class="muted small">${x.id} · ${x.cls}-${x.sec}</span></span><span>›</span></div>`).join('')}`}
+  window.RPT={name,rows};
+  return `<div class="card"><div class="fl" style="margin-bottom:12px">${types.filter(t=>t[0]!='camp'||S.campus=='All Campuses').map(([k,l])=>`<span class="chip ${r.t==k?'on':''}" onclick="S.rp.t='${k}';S.rp.sid=null;render()">${l}</span>`).join('')}<div style="flex:1"></div>
+   ${r.t!='led'?`<select style="width:auto" onchange="S.rp.mo=this.value;render()">${['2026-08','2026-09','2026-10'].concat(V.some(v=>v.mo=='2026-11')?['2026-11']:[]).map(m=>`<option value="${m}" ${mo==m?'selected':''}>${MNAME[m]}</option>`).join('')}</select>`:(r.sid!=null?'<button class="btn sm" onclick="S.rp.sid=null;render()">← Search</button>':'')}
+   ${rows.length?`<button class="btn sm" onclick="dlCSV(RPT.name,RPT.rows)">⬇ Export Excel</button><button class="btn sm" onclick="toast('Report sent to printer')">🖨 Print</button>`:''}</div>
+   <div class="tw">${body}</div></div>`}
+
+// ---- fee structure ----
+function feeStruct(){const ci=S.fsc!=null?S.fsc:(S.campus=='All Campuses'?0:cpOf(S.campus).ci),f=FS[ci];
+  return `<div class="grid g32"><div class="card"><h3>Monthly fee per class ${S.tier=='a'?`<select style="width:auto" onchange="S.fsc=+this.value;render()">${CP.map(c=>`<option value="${c.ci}" ${ci==c.ci?'selected':''}>${c.short}</option>`).join('')}</select>`:''}</h3>
+  <div class="tw"><table><tr><th>Class</th><th>Tuition (monthly)</th><th>Annual charges</th><th>Exam fee</th></tr>
+  ${CL.map(k=>`<tr><td><b>${k}</b></td><td><input style="width:100px" type="number" value="${f[k].tuition}" onchange="FS[${ci}]['${k}'].tuition=+this.value"></td><td><input style="width:90px" type="number" value="${f[k].annual}" onchange="FS[${ci}]['${k}'].annual=+this.value"></td><td><input style="width:80px" type="number" value="${f[k].exam}" onchange="FS[${ci}]['${k}'].exam=+this.value"></td></tr>`).join('')}</table></div>
+  <br><div class="fl"><button class="btn p" onclick="toast('Fee structure saved for ${CP[ci].short}. Applies to vouchers generated from now; existing vouchers are unchanged.')">Save</button>${S.tier=='a'?`<button class="btn" onclick="FS.forEach((x,i)=>{if(i!=${ci})FS[i]=JSON.parse(JSON.stringify(FS[${ci}]))});toast('Copied to all campuses');render()">Copy to all campuses</button>`:''}</div></div>
+  <div><div class="card"><h3>Fee heads</h3>${[['Tuition','Monthly',1],['Annual charges','Once a year (billed in August)',1],['Admission fee','One-time, on admission · ${R(ADMFEE)}',1],['Exam fee','Per term',1],['Transport','Monthly, by route · '+R(TRANSPORT),S.tier=='a'],['Extra charges','Ad hoc (picnic, uniform, stationery)',1]].map(h=>`<div class="row small"><span><b>${h[0]}</b><br><span class="muted">${h[1].replace('${R(ADMFEE)}',R(ADMFEE))}</span></span>${h[2]?'<span class="badge b-ok">Active</span>':'<span class="badge b-adv">Adv</span>'}</div>`).join('')}</div>
+  <div class="card"><h3>Rules</h3><div class="f"><label>Due date (day of month)</label><input type="number" value="${RULE.dueDay}" onchange="RULE.dueDay=+this.value"></div>
+   <div class="f"><label>Late fine (flat, after due date)</label><input type="number" value="${RULE.fine}" onchange="RULE.fine=+this.value"></div>
+   <div class="f"><label>Sibling discount (% of tuition, younger child)</label><input type="number" value="${RULE.sib}" onchange="RULE.sib=+this.value"></div>
+   <div class="f"><label>Scholarships</label><input value="Merit 25%, Staff child 50%, Need-based 30% (approval)" disabled></div>
+   <div class="f"><label>Approvals</label><input value="Fine waivers → Principal · Concessions above ${RULE.limit}% → Principal" disabled></div>
+   <div class="small muted">Payments are applied to the oldest voucher first (arrears, then fine, then the current month). Extra money is kept as advance credit.</div></div></div></div>`}
 
 // ---------- GATE ----------
 P.gate=()=>{
@@ -451,22 +786,313 @@ function pickGo(i){const v=document.querySelector('input[name=pk]:checked').valu
 function gateVis(){return `<div class="grid g32"><div class="card"><h3>Today's visitors</h3><div class="tw"><table><tr><th>Visitor</th><th>Purpose</th><th>To meet</th><th>In</th><th>Out</th></tr>${S.visitors.map((v,i)=>`<tr><td><b>${v.n}</b></td><td>${v.p}</td><td>${v.who}</td><td>${v.t}</td><td>${v.out||`<button class="btn sm" onclick="S.visitors[${i}].out='11:20';render()">Check out</button>`}</td></tr>`).join('')}</table></div></div>
   <div class="card"><h3>Check in a visitor</h3><div class="f"><label>Name</label><input id="vn" placeholder="Visitor name"></div><div class="f"><label>CNIC (optional)</label><input placeholder="35202-…"></div><div class="f"><label>Purpose</label><select id="vp"><option>Meet principal</option><option>Fee query</option><option>Vendor delivery</option><option>Parent meeting</option></select></div>
   <button class="btn p" onclick="S.visitors.push({n:$('#vn').value||'Visitor',p:$('#vp').value,t:'11:'+(10+S.visitors.length),who:'Front desk',out:null});toast('Checked in; host notified');render()">Check in & print badge</button></div></div>`}
-function gateLate(){const L=studs.filter(s=>S.att[s.id]=='L').slice(0,8);return `<div class="card"><h3>Late arrivals today</h3>${L.map(s=>`<div class="row"><span><b>${s.name}</b> <span class="muted small">${s.cls}-${s.sec}</span></span><span class="badge b-warn">8:${20+s.i%30}</span></div>`).join('')||'<div class="muted">None</div>'}</div>`}
+function gateLate(){const L=vs().filter(s=>S.att[s.id]=='L').slice(0,8);return `<div class="card"><h3>Late arrivals today</h3>${L.map(s=>`<div class="row"><span><b>${s.name}</b> <span class="muted small">${s.cls}-${s.sec}</span></span><span class="badge b-warn">8:${20+s.i%30}</span></div>`).join('')||'<div class="muted">None</div>'}</div>`}
+// ================= ATTENDANCE, STAFF & PAYROLL, TEACHER DASHBOARD =================
+const nowT=()=>new Date().toTimeString().slice(0,5);
+const meT=()=>{const c=cpOf(S.campus)||CP[0];return STAFF.find(x=>x.ci==c.ci&&x.r=='Teacher'&&x.st=='active'&&x.cts.includes('5-A'))||STAFF.find(x=>x.ci==c.ci&&x.r=='Teacher'&&x.st=='active')};
+const secSplit=k=>[k.slice(0,k.lastIndexOf('-')),k.slice(-1)];
+const secStudents=(ci,k)=>{const [cl,sc]=secSplit(k),r=[];for(let i=CP[ci].first;i<CP[ci].last;i++){const s=studs[i];if(s.cls==cl&&s.sec==sc)r.push(s)}return r};
+const roleGroup=r=>r=='Teacher'?'t':(r=='Accountant'||r=='Principal')?'a':r=='Front desk'?'f':'s';
+function apprExtra(ap,y){
+  if(ap.vid&&y)doWaive(ap.vid);
+  if(ap.lid){const l=LEAVES.find(x=>x.id==ap.lid);if(l){l.status=y?'Approved':'Rejected';if(y){suggestCover(l);const st=STAFF.find(x=>x.id==l.sid);if(l.type=='Unpaid')st.ab+=l.days;if(l.from<=TODAY_ISO&&l.to>=TODAY_ISO){S.sat[st.id]='L';delete S.stime[st.id]}recomputeCP()}}}
+  if(ap.pay!=null)S.payroll[ap.pay]=y?'approved':'draft'}
+function suggestCover(l){if(l.cover)return;const st=STAFF.find(x=>x.id==l.sid),f=STAFF.find(x=>x.ci==st.ci&&x.r=='Teacher'&&x.st=='active'&&x.id!=st.id&&S.sat[x.id]=='P'&&x.cts.length<=1);if(f)l.cover=f.n}
+
+// ---------- ATTENDANCE ----------
+P.attendance=()=>{
+  const teach=S.role=='teacher',tabs=teach?[['stu','My class'],['stf','My check-in']]:[['ov','Overview'],['stu','Students'],['stf','Staff'],['rep','Reports']],def=teach?'stu':'ov';
+  const t=tabs.some(x=>x[0]==S.tab.att)?S.tab.att:def;S.tab.att=t;
+  return `<h2>Attendance</h2><div class="sub">${TODAY} · Teachers mark by 9:00 · parents of absent students are notified instantly</div>`+tab('att',tabs,def)+({ov:attOv,stu:attStu,stf:attStf,rep:attRep}[t])()};
+const secCounts=(ci,k)=>{const c={P:0,A:0,L:0,n:0,tot:0};secStudents(ci,k).forEach(s=>{c.tot++;const a=S.att[s.id];if(a){c.n++;c[a]++}});return c};
+function attOv(){
+  if(S.campus=='All Campuses')return `<div class="card"><div class="tw"><table><tr><th>Campus</th><th class="r">Classes marked</th><th>Not marked yet</th><th class="r">Attendance</th><th class="r">Staff present</th><th></th></tr>
+   ${CP.map(c=>`<tr><td><b>${c.short}</b><div class="muted small">${c.pr}</div></td><td class="r">${SECS.length-c.unm.length}/${SECS.length}</td><td class="small">${c.unm.length?c.unm.map(u=>`<span class="badge b-warn">${u}</span>`).join(' '):'<span class="badge b-ok">All marked</span>'}</td><td class="r">${c.att}%</td><td class="r">${c.pres}/${c.staff}</td><td><button class="btn sm" onclick="drill('${c.n}')">Open</button></td></tr>`).join('')}</table></div></div>`;
+  const c=cpCur(),rows=SECS.map(k=>({k,t:secTeacher(c.ci,k),d:S.attDone[c.ci+'|'+k],n:secCounts(c.ci,k)}));
+  const sent=studs.slice(c.first,c.last).filter(s=>S.attSent[s.id]).length,ab=rows.reduce((a,r)=>a+r.n.A,0);
+  return `<div class="grid g4" style="margin-bottom:14px"><div class="card kpi"><div class="l">Classes marked</div><div class="v">${SECS.length-c.unm.length}/${SECS.length}</div></div><div class="card kpi"><div class="l">Attendance today</div><div class="v">${c.att}%</div></div><div class="card kpi"><div class="l">Absent students</div><div class="v dn">${ab}</div></div><div class="card kpi"><div class="l">Parents notified</div><div class="v">${sent}</div></div></div>
+  <div class="card"><div class="tw"><table><tr><th>Class</th><th>Class teacher</th><th>Status</th><th class="r">Present</th><th class="r">Absent</th><th class="r">Late</th><th></th></tr>
+  ${rows.map(r=>`<tr><td><b>${secName(r.k)}</b></td><td>${r.t?r.t.n:'<span class="muted">vacant</span>'}</td><td>${r.d?`<span class="badge b-ok">Marked ${r.d.t}</span>`:'<span class="badge b-warn">Not marked</span>'}</td><td class="r">${r.d?r.n.P:'–'}</td><td class="r ${r.n.A?'dn':''}">${r.d?r.n.A:'–'}</td><td class="r">${r.d?r.n.L:'–'}</td><td>${r.d?`<button class="btn sm" onclick="openSec('${r.k}')">View</button>`:`<button class="btn sm g" onclick="remindTeacher('${r.k}')">Remind teacher</button>`}</td></tr>`).join('')}</table></div></div>`}
+function openSec(k){const [a,b]=secSplit(k);S.cls=a;S.sec=b;S.tab.att='stu';render()}
+function remindTeacher(k){const c=cpCur(),t=secTeacher(c.ci,k);openM(`<h2>Remind class teacher</h2><div class="sub">${t?t.n:'No class teacher assigned'} · ${secName(k)}</div>${wa(`Assalam o Alaikum ${t?t.n:''}, ${secName(k)} attendance has not been marked yet. Please mark it in the Taleem app. – Principal's office`,nowT())}<br><button class="btn g" onclick="closeM();toast('Reminder sent to ${t?t.n:'teacher'}')">Send reminder</button>`)}
+function chooseCampus(){return `<div class="card"><h3>Choose a campus to mark or view class attendance</h3>${CP.map(c=>`<div class="row"><span><b>${c.short}</b> <span class="muted small">${c.pr}</span></span><span>${c.unm.length?`<span class="badge b-warn">${c.unm.length} not marked</span>`:'<span class="badge b-ok">All marked</span>'} <button class="btn sm" onclick="drill('${c.n}')">Open</button></span></div>`).join('')}</div>`}
+function attStu(){
+  if(S.campus=='All Campuses')return chooseCampus();
+  const c=cpCur(),teach=S.role=='teacher',me=teach?meT():null,mine=teach?me.cts:SECS;
+  let key=S.cls+'-'+S.sec;if(!mine.includes(key)){const k=mine[0];[S.cls,S.sec]=secSplit(k);key=k}
+  const L=secStudents(c.ci,key),done=S.attDone[c.ci+'|'+key],tch=secTeacher(c.ci,key),ab=L.filter(s=>S.att[s.id]=='A'),left=L.filter(s=>!S.att[s.id]).length,pend=ab.filter(s=>!S.attSent[s.id]);
+  return `<div class="card"><div class="fl" style="margin-bottom:12px">
+  ${teach&&mine.length==1?`<b style="font-size:16px">${secName(key)}</b>`:teach?`<select style="width:auto" onchange="[S.cls,S.sec]=secSplit(this.value);render()">${mine.map(k=>`<option value="${k}" ${k==key?'selected':''}>${secName(k)}</option>`).join('')}</select>`:
+   `<select style="width:auto" onchange="S.cls=this.value;render()">${CL.map(x=>`<option ${S.cls==x?'selected':''}>${x}</option>`).join('')}</select><select style="width:auto" onchange="S.sec=this.value;render()">${AB.map(x=>`<option ${S.sec==x?'selected':''}>${x}</option>`).join('')}</select>`}
+  <span class="muted">Class teacher: ${tch?tch.n:'vacant'}</span>${done?`<span class="badge b-ok">Submitted ${done.t} by ${done.by}</span>`:'<span class="badge b-warn">Not submitted</span>'}<div style="flex:1"></div>
+  <button class="btn sm" onclick="L2('P')">All present</button></div>
+  <div class="tw"><table><tr><th>Roll</th><th>Name</th><th>Mark</th><th>WhatsApp to parent</th></tr>
+  ${L.map(s=>`<tr><td class="muted">${s.id}</td><td><b>${s.name}</b></td><td class="att">${['P','A','L'].map(x=>`<button class="${x} ${S.att[s.id]==x?'on':''}" onclick="S.att['${s.id}']='${x}';delete S.attSent['${s.id}'];recomputeCP();render()">${x}</button>`).join('')}</td>
+   <td>${S.att[s.id]=='A'?(S.attSent[s.id]?'<span class="badge b-ok">Sent ✓✓</span>':'<span class="badge b-warn">Pending</span>'):'<span class="muted">—</span>'}</td></tr>`).join('')}</table></div>
+  <div class="fl" style="margin-top:12px"><span class="muted small">${L.filter(s=>S.att[s.id]=='P').length} present · ${ab.length} absent · ${L.filter(s=>S.att[s.id]=='L').length} late${left?' · <b>'+left+' not marked</b>':''}</span><div style="flex:1"></div>
+  <button class="btn g" onclick="submitAtt('${key}')">${done?'Update & resubmit':'Submit attendance'}${pend.length?' & notify '+pend.length+' parent'+(pend.length==1?'':'s'):''}</button></div></div>
+  ${T()=='a'?'<div class="demo-note">Advanced: parents are alerted automatically on submit; unreplied absences get a teacher follow-up task; SMS fallback if WhatsApp fails.</div>':'<div class="demo-note">Basic: submit once; WhatsApp goes to every absent child’s parent. <b>Advanced I</b> falls back to SMS.</div>'}`}
+function L2(x){const c=cpCur(),k=S.cls+'-'+S.sec;secStudents(c.ci,k).forEach(s=>{S.att[s.id]=x;delete S.attSent[s.id]});recomputeCP();render()}
+function submitAtt(key){const c=cpCur(),L=secStudents(c.ci,key),left=L.filter(s=>!S.att[s.id]).length;
+  if(left)return toast(left+' student'+(left>1?'s':'')+' not marked yet. Mark everyone, or tap “All present” first');
+  const pend=L.filter(s=>S.att[s.id]=='A'&&!S.attSent[s.id]);
+  if(!pend.length)return finishAtt(key,0);
+  openM(`<h2>Message preview</h2><div class="sub">Sent to ${pend.length} parent${pend.length>1?'s':''} · Urdu + English</div>${wa(absentMsg(pend[0]),nowT())}<br><button class="btn g" onclick="finishAtt('${key}',1)">Send ${pend.length} WhatsApp${pend.length>1?'s':''} & submit</button>`)}
+function finishAtt(key,send){const c=cpCur(),L=secStudents(c.ci,key),me=S.role=='teacher'?meT().n:(S.role=='front'?'Front desk':'Principal office');
+  if(send)L.filter(s=>S.att[s.id]=='A'&&!S.attSent[s.id]).forEach(s=>{S.attSent[s.id]=1;S.log.unshift('Absent alert → '+s.father+' ('+s.name+')')});
+  S.attDone[c.ci+'|'+key]={by:me,t:nowT()};recomputeCP();closeM();toast(secName(key)+' attendance submitted'+(send?' · absent alerts delivered ✓✓':''));render()}
+function attStf(){
+  const teach=S.role=='teacher',pg=S.apg||0;let L=teach?[meT()]:STAFF.filter(x=>inScope(x.ci)&&x.st=='active');
+  const pres=L.filter(x=>S.sat[x.id]=='P').length,st=x=>S.sat[x.id];
+  return `<div class="card"><div class="fl" style="margin-bottom:10px"><span class="muted">${teach?'Check in when you arrive. Late after 8:00.':'Marked by the front desk or principal; teachers can also check in themselves from the app.'}</span><div style="flex:1"></div><span class="badge b-ok">${pres}/${L.length} present</span></div>
+  <div class="tw"><table><tr><th>Name</th><th>Role</th><th>Status</th><th>Check-in</th>${teach?'<th></th>':''}</tr>
+  ${L.slice(pg*20,pg*20+20).map(x=>`<tr><td><b>${x.n}</b>${campTag(x)}</td><td>${x.r}</td><td>${teach?(st(x)=='P'?'<span class="badge b-ok">Present</span>':st(x)=='L'?'<span class="badge b-warn">On leave</span>':st(x)=='A'?'<span class="badge b-bad">Absent</span>':'<span class="badge b-warn">Not checked in</span>'):
+   `<span class="att">${[['P','P'],['A','A'],['L','Lv']].map(([k,l])=>`<button class="${k=='L'?'L':k} ${st(x)==k?'on':''}" style="width:38px" onclick="setSat('${x.id}','${k}')">${l}</button>`).join('')}</span>`}</td><td class="muted">${S.stime[x.id]||'—'}</td>${teach?`<td>${st(x)!='P'?`<button class="btn sm g" onclick="setSat('${x.id}','P')">Check in</button>`:''}</td>`:''}</tr>`).join('')}</table></div>
+  ${pgBar(L.length,20,pg,'S.apg')}</div>`}
+function setSat(id,k){S.sat[id]=k;if(k=='P')S.stime[id]=nowT();else delete S.stime[id];recomputeCP();render()}
+function attRep(){const pg=S.rpg||0,all=S.campus=='All Campuses',pool=vs().filter(s=>S.att[s.id]||true);
+  let tb='',rows=[];
+  if(all){rows=CP.map(c=>{let sum=0,n=0;for(let i=c.first;i<c.last;i++){sum+=stPct(studs[i]);n++}return [c.short,n,Math.round(sum/n)]});
+    tb=`<table><tr><th>Campus</th><th class="r">Students</th><th>Monthly attendance</th></tr>${rows.map(r=>`<tr><td><b>${r[0]}</b></td><td class="r">${r[1]}</td><td style="min-width:140px"><div class="bar"><i style="width:${r[2]}%"></i></div><span class="small">${r[2]}%</span></td></tr>`).join('')}</table>`}
+  else{const c=cpCur();rows=SECS.map(k=>{const L=secStudents(c.ci,k);return [secName(k),L.length,Math.round(L.reduce((a,s)=>a+stPct(s),0)/L.length)]}).sort((a,b)=>a[2]-b[2]);
+    tb=`<table><tr><th>Class</th><th class="r">Students</th><th>Monthly attendance (lowest first)</th></tr>${rows.map(r=>`<tr><td><b>${r[0]}</b></td><td class="r">${r[1]}</td><td style="min-width:140px"><div class="bar"><i style="width:${r[2]}%;background:${r[2]<88?'var(--bad)':'var(--brand)'}"></i></div><span class="small">${r[2]}%</span></td></tr>`).join('')}</table>`}
+  const low=pool.filter(s=>stPct(s)<85).sort((a,b)=>stPct(a)-stPct(b));
+  return `<div class="grid g32"><div class="card"><h3>Monthly attendance · October (8 school days) <button class="btn sm" onclick="dlCSV('attendance-oct',[['${all?'Campus':'Class'}','Students','Attendance %']].concat(${JSON.stringify(rows)}))">⬇ Export Excel</button></h3><div class="tw">${tb}</div></div>
+  <div class="card"><h3>Below 85% <span class="badge b-bad">${low.length}</span></h3><div class="small muted" style="margin-bottom:6px">Students to follow up with parents</div>
+   ${low.slice(pg*8,pg*8+8).map(s=>`<div class="row small"><span><b>${s.name}</b>${campTag(s)}<br><span class="muted">${s.cls}-${s.sec} · ${s.father}</span></span><span><span class="badge b-bad">${stPct(s)}%</span> <button class="btn sm g" onclick="toast('Attendance warning sent to ${s.father} on WhatsApp')">WhatsApp</button></span></div>`).join('')||'<div class="muted">None</div>'}
+   ${pgBar(low.length,8,pg,'S.rpg')}</div></div>`}
+
+// ---------- TEACHER DASHBOARD ----------
+function dashTeacher(){const m=meT(),c=CP[m.ci],mine=m.cts.slice(0,3),myLv=LEAVES.filter(l=>l.sid==m.id),low=[];
+  mine.forEach(k=>secStudents(c.ci,k).forEach(s=>{if(stPct(s)<85)low.push(s)}));
+  return `<h2>Good morning, ${m.n}</h2><div class="sub">${TODAY} · ${c.n} · ${m.r}${m.cts.length?' · Class teacher '+m.cts.map(secName).join(', '):''}</div>
+  <div class="grid g2"><div>${mine.map(k=>{const n=secCounts(c.ci,k),d=S.attDone[c.ci+'|'+k];return `<div class="card"><h3>${secName(k)} · ${n.tot} students ${d?`<span class="badge b-ok">Marked ${d.t}</span>`:'<span class="badge b-warn">Not marked yet</span>'}</h3>
+   ${d?`<div class="fl small"><span class="up">${n.P} present</span><span class="dn">${n.A} absent</span><span class="muted">${n.L} late</span></div><br>`:'<div class="muted small" style="margin-bottom:10px">Mark attendance by 9:00. Parents of absent children get a WhatsApp automatically.</div>'}
+   <button class="btn ${d?'':'g'}" onclick="openSec('${k}');go('attendance')">${d?'View / edit attendance':'Mark attendance'}</button></div>`}).join('')}
+   ${low.length?`<div class="card"><h3>Low attendance in my classes <span class="badge b-bad">${low.length}</span></h3>${low.slice(0,5).map(s=>`<div class="row small"><span><b>${s.name}</b> <span class="muted">${s.cls}-${s.sec}</span></span><span class="badge b-bad">${stPct(s)}%</span></div>`).join('')}</div>`:''}</div>
+  <div><div class="card"><h3>My check-in</h3>${S.sat[m.id]=='P'?`<div class="badge b-ok">Checked in at ${S.stime[m.id]}</div>`:`<button class="btn g" onclick="setSat('${m.id}','P')">Check in now</button>`}</div>
+   <div class="card"><h3>My leave <button class="btn sm" onclick="leaveForm('${m.id}')">Apply for leave</button></h3>${myLv.map(l=>`<div class="row small"><span>${fd(l.from)}${l.days>1?' – '+fd(l.to):''} · ${l.type}</span><span class="badge ${l.status=='Approved'?'b-ok':l.status=='Pending'?'b-warn':'b-bad'}">${l.status}</span></div>`).join('')||'<div class="muted small">No leave requests</div>'}</div>
+   <div class="card"><h3>Quick links</h3><div class="fl"><button class="btn" onclick="go('exams')">Enter marks</button><button class="btn" onclick="go('comms')">Post diary</button><button class="btn" onclick="go('students')">My students</button></div></div></div></div>`}
 
 // ---------- STAFF ----------
-P.staff=()=>{
-  const t=curTab('stf','list');
-  return `<h2>Staff & Payroll</h2><div class="sub">${S.staff.length} staff · teachers never see this page</div>`+tab('stf',[['list','Staff'],['pay','Payroll – Oct 2026'],['leave','Leave & cover',1]])+
-  ({list:stfList,pay:stfPay,leave:stfLeave}[t])()};
-function stfList(){return `<div class="card"><div class="tw"><table><tr><th>Name</th><th>Role</th><th class="r">Salary</th><th>Today</th></tr>${S.staff.map(s=>`<tr><td><b>${s.n}</b></td><td>${s.r}</td><td class="r">${S.role=='owner'||S.role=='accounts'?R(s.s):'••••'}</td><td>${s.pres?'<span class="badge b-ok">Present</span>':'<span class="badge b-warn">Leave</span>'}</td></tr>`).join('')}</table></div></div>`}
-const net=s=>Math.round(s.s-s.ab*s.s/30-s.adv);
-function stfPay(){const tot=S.staff.reduce((a,s)=>a+net(s),0);
-  return `<div class="grid g3" style="margin-bottom:14px"><div class="card kpi" style="margin:0"><div class="l">Net payable</div><div class="v">${R(tot)}</div></div><div class="card kpi" style="margin:0"><div class="l">Advances recovered</div><div class="v">${R(S.staff.reduce((a,s)=>a+s.adv,0))}</div></div><div class="card kpi" style="margin:0"><div class="l">Absence deductions</div><div class="v">${R(S.staff.reduce((a,s)=>a+s.ab*s.s/30,0))}</div></div></div>
-  <div class="card"><div class="tw"><table><tr><th>Name</th><th class="r">Basic</th><th class="r">Absent days</th><th class="r">Advance</th><th class="r">Net</th><th></th></tr>${S.staff.map((s,i)=>`<tr><td><b>${s.n}</b></td><td class="r">${R(s.s)}</td><td class="r">${s.ab}</td><td class="r">${s.adv?R(s.adv):'–'}</td><td class="r"><b>${R(net(s))}</b></td><td><button class="btn sm" onclick="payslip(${i})">Payslip</button></td></tr>`).join('')}</table></div>
-  <br><button class="btn p" onclick="toast('Payroll approved. Bank transfer file (IBFT) and payslips ready')">Approve & export bank file</button> <button class="btn g" onclick="toast('Payslips sent on WhatsApp to ${S.staff.length} staff')">Send payslips</button></div>`}
-function payslip(i){const s=S.staff[i];openM(`<div class="receipt"><h4>Payslip · October 2026</h4><div class="c">${s.n} · ${s.r}</div><div class="row"><span>Basic salary</span><b>${R(s.s)}</b></div><div class="row"><span>Absence deduction (${s.ab} day${s.ab==1?'':'s'})</span><b class="dn">−${R(s.ab*s.s/30)}</b></div><div class="row"><span>Advance recovery</span><b class="dn">−${R(s.adv)}</b></div><div class="row" style="font-size:16px"><b>Net pay</b><b>${R(net(s))}</b></div></div>`)}
-function stfLeave(){return advOnly('Leave & substitute cover','Teachers apply from the app; the principal approves; Taleem proposes a free teacher per period. Leave balances feed payroll automatically.','<div class="card"><div class="row"><div><b>Ms. Rabia Noor</b><div class="muted small">2 days · medical · Class 7 Science covered by Ms. Hina</div></div><span class="badge b-ok">Approved</span></div></div>')}
+P.staff=()=>{const t=curTab('stf','list');
+  return `<h2>Staff & Payroll</h2><div class="sub">${STAFF.filter(x=>inScope(x.ci)&&x.st=='active').length} active staff · teachers never see this page</div>`+tab('stf',[['list','Staff'],['pay','Payroll – Oct 2026'],['leave','Leave & cover',1]])+({list:stfList,pay:stfPay,leave:stfLeave}[t])()};
+function stfList(){
+  const f=S.sf||(S.sf={g:'',st:'active',q:'',pg:0}),mgr=feeRole(),q=f.q.toLowerCase(),sc=STAFF.filter(x=>inScope(x.ci));
+  const cnt=k=>sc.filter(x=>x.st==k).length,act=sc.filter(x=>x.st=='active');
+  const L=sc.filter(x=>x.st==f.st&&(!f.g||roleGroup(x.r)==f.g)&&(!q||(x.n+x.id+x.r).toLowerCase().includes(q)));
+  return `<div class="grid g4" style="margin-bottom:14px"><div class="card kpi"><div class="l">Active staff</div><div class="v">${act.length}</div></div><div class="card kpi"><div class="l">Teachers</div><div class="v">${act.filter(x=>x.r=='Teacher').length}</div></div><div class="card kpi"><div class="l">Monthly payroll</div><div class="v">${Mn(act.reduce((a,x)=>a+x.s,0))}</div></div><div class="card kpi"><div class="l">Disabled / former</div><div class="v">${cnt('disabled')} / ${cnt('removed')}</div></div></div>
+  <div class="card"><div class="fl" style="margin-bottom:10px"><input id="sfq" style="max-width:240px" placeholder="Search name, ID or role…" value="${f.q}" oninput="S.sf.q=this.value;S.sf.pg=0;render();const e=$('#sfq');e.focus();e.setSelectionRange(99,99)">
+   ${[['','All roles'],['t','Teachers'],['a','Accounts & admin'],['f','Front desk'],['s','Support']].map(([k,l])=>`<span class="chip ${f.g==k?'on':''}" onclick="S.sf.g='${k}';S.sf.pg=0;render()">${l}</span>`).join('')}<div style="flex:1"></div>${mgr?'<button class="btn p" onclick="staffForm()">+ Add staff</button>':''}</div>
+   <div class="fl" style="margin-bottom:10px">${[['active','Active'],['disabled','Disabled'],['removed','Former staff']].map(([k,l])=>`<span class="chip ${f.st==k?'on':''}" onclick="S.sf.st='${k}';S.sf.pg=0;render()">${l} (${cnt(k)})</span>`).join('')}</div>
+   <div class="tw"><table><tr><th>ID</th><th>Name</th><th>Role</th><th>Class teacher of</th><th class="r">Salary</th><th>Login</th><th>Today</th>${mgr?'<th></th>':''}</tr>
+   ${L.slice(f.pg*15,f.pg*15+15).map(x=>{const s=S.sat[x.id];return `<tr style="${x.st!='active'?'opacity:.65':''}"><td class="muted">${x.id}</td><td><b>${x.n}</b>${campTag(x)}</td><td>${x.r}</td><td class="small">${x.cts.map(secName).join(', ')||'—'}</td><td class="r">${R(x.s)}</td><td>${x.login&&x.st=='active'?'<span class="badge b-ok">Active</span>':'<span class="badge b-bad">Blocked</span>'}</td>
+    <td>${x.st!='active'?`<span class="muted small">${x.reason||''}</span>`:s=='P'?'<span class="badge b-ok">Present</span>':s=='L'?'<span class="badge b-warn">Leave</span>':s=='A'?'<span class="badge b-bad">Absent</span>':'—'}</td>
+    ${mgr?`<td class="fl" style="gap:4px">${x.st=='active'?`<button class="btn sm" onclick="staffForm('${x.id}')">Edit</button><button class="btn sm" onclick="disableForm('${x.id}')">Disable</button><button class="btn sm" onclick="removeForm('${x.id}')">Remove</button>`:x.st=='disabled'?`<button class="btn sm g" onclick="enableStaff('${x.id}')">Enable</button><button class="btn sm" onclick="removeForm('${x.id}')">Remove</button>`:''}</td>`:''}</tr>`}).join('')||'<tr><td colspan="8" class="muted" style="text-align:center;padding:20px">No staff here</td></tr>'}</table></div>
+   ${pgBar(L.length,15,f.pg,'S.sf.pg')}</div>`}
+const ROLES=['Teacher','Accountant','Front desk','Gate guard','Van driver','Peon / Ayah'];
+function staffForm(id){const x=id?STAFF.find(s=>s.id==id):null,ci0=x?x.ci:(S.campus=='All Campuses'?0:cpOf(S.campus).ci);
+  openM(`<h2>${x?'Edit '+x.n:'Add staff member'}</h2><div class="sub">${x?x.id:'A login invite is sent on WhatsApp so they can use the app'}</div><div class="frm">
+  <div class="f"><label>Full name</label><input id="sn" value="${x?x.n:''}" placeholder="e.g. Ms. Sana Tariq"></div>
+  <div class="f"><label>Role</label><select id="sr" onchange="$('#ss').value=ROLE_SALARY[this.value]">${ROLES.map(r=>`<option ${x&&x.r==r?'selected':''}>${r}</option>`).join('')}</select></div>
+  <div class="f"><label>Campus</label>${x||S.campus!='All Campuses'?`<input id="sc" value="${CP[ci0].n}" disabled>`:`<select id="sc">${CP.map(c=>`<option value="${c.ci}">${c.n}</option>`).join('')}</select>`}</div>
+  <div class="f"><label>Monthly salary (Rs)</label><input id="ss" type="number" value="${x?x.s:ROLE_SALARY.Teacher}"></div>
+  <div class="f"><label>Phone / WhatsApp</label><input id="sp" value="${x?x.phone:''}" placeholder="03XX-XXXXXXX"></div>
+  <div class="f"><label>Joining date</label><input id="sj" type="date" value="${x?x.join:'2026-10-12'}"></div>
+  <div class="f"><label>Class teacher of (optional)</label><select id="st"><option value="">—</option>${SECS.map(k=>`<option value="${k}" ${x&&x.cts.includes(k)?'selected':''}>${secName(k)}</option>`).join('')}</select></div></div>
+  ${x?'':'<label class="small"><input type="checkbox" checked style="width:auto"> Send WhatsApp login invite</label><br>'}<br><button class="btn p" onclick="saveStaff('${id||''}',${ci0})">${x?'Save changes':'Add staff'}</button>`)}
+function saveStaff(id,ci0){const n=$('#sn').value.trim();if(!n)return toast('Enter a name');
+  const o={n,r:$('#sr').value,s:+$('#ss').value||0,phone:$('#sp').value||'0300-0000000',join:$('#sj').value,ci:$('#sc').tagName=='SELECT'?+$('#sc').value:ci0},sec=$('#st').value;
+  if(id){const x=STAFF.find(s=>s.id==id);Object.assign(x,o);if(sec)STAFF.forEach(t=>{t.cts=t.cts.filter(k=>k!=sec)});x.cts=sec?[sec]:x.cts.filter(k=>!sec);toast('Saved '+x.n)}
+  else{if(sec)STAFF.forEach(t=>{t.cts=t.cts.filter(k=>k!=sec)});const x=mkStaff(Object.assign(o,{cts:sec?[sec]:[]}));S.sat[x.id]='P';S.stime[x.id]=nowT();toast(x.id+' added to '+CP[x.ci].short+' · login invite sent on WhatsApp')}
+  recomputeCP();closeM();render()}
+function disableForm(id){const x=STAFF.find(s=>s.id==id);
+  openM(`<h2>Disable ${x.n}?</h2><div class="sub">They can no longer log in and drop off attendance sheets and the next payroll. You can enable them again any time.</div>
+  <div class="f"><label>Reason</label><select id="dr"><option>Suspended</option><option>On long leave</option><option>Notice period</option><option>Other</option></select></div>
+  ${x.cts.length?`<div class="demo-note">${x.n} is class teacher of ${x.cts.map(secName).join(', ')}. That class will show “vacant” until you assign someone.</div>`:''}
+  <br><button class="btn p" onclick="disableStaff('${id}')">Disable</button> <button class="btn" onclick="closeM()">Cancel</button>`)}
+function disableStaff(id){const x=STAFF.find(s=>s.id==id);x.st='disabled';x.login=false;x.reason=$('#dr').value;recomputeCP();closeM();toast(x.n+' disabled · login blocked');render()}
+function enableStaff(id){const x=STAFF.find(s=>s.id==id);x.st='active';x.login=true;x.reason='';S.sat[x.id]='P';S.stime[x.id]=nowT();recomputeCP();toast(x.n+' enabled · login restored');render()}
+function removeForm(id){const x=STAFF.find(s=>s.id==id);
+  openM(`<h2>Remove ${x.n}?</h2><div class="sub">Moves them to Former staff. Their history, salary records and payslips are kept.</div>
+  <div class="frm"><div class="f"><label>Last working day</label><input id="rd" type="date" value="2026-10-12"></div><div class="f"><label>Reason</label><select id="rr"><option>Resigned</option><option>Terminated</option><option>Contract ended</option><option>Retired</option></select></div></div>
+  <div class="demo-note">Final settlement: salary for days worked minus advances (${R(x.adv)} recoverable).</div><br><button class="btn p" onclick="removeStaff('${id}')">Remove from school</button> <button class="btn" onclick="closeM()">Cancel</button>`)}
+function removeStaff(id){const x=STAFF.find(s=>s.id==id);x.st='removed';x.login=false;x.reason=$('#rr').value+' · last day '+fd($('#rd').value);recomputeCP();closeM();toast(x.n+' moved to Former staff');render()}
 
+// ---------- PAYROLL ----------
+function stfPay(){
+  if(S.campus=='All Campuses'){const rows=CP.map(c=>{const A=STAFF.filter(x=>x.ci==c.ci&&x.st=='active');return {c,n:A.length,g:A.reduce((a,x)=>a+x.s,0),nt:A.reduce((a,x)=>a+net(x),0),st:S.payroll[c.ci]||'draft'}});
+    return `<div class="grid g3" style="margin-bottom:14px"><div class="card kpi" style="margin:0"><div class="l">Gross payroll</div><div class="v">${Mn(rows.reduce((a,r)=>a+r.g,0))}</div></div><div class="card kpi" style="margin:0"><div class="l">Net payable</div><div class="v">${Mn(rows.reduce((a,r)=>a+r.nt,0))}</div></div><div class="card kpi" style="margin:0"><div class="l">Campuses approved / paid</div><div class="v">${rows.filter(r=>r.st!='draft'&&r.st!='submitted').length}/${rows.length}</div></div></div>
+    <div class="card"><div class="tw"><table><tr><th>Campus</th><th class="r">Staff</th><th class="r">Gross</th><th class="r">Net payable</th><th>Status</th><th></th></tr>${rows.map(r=>`<tr><td><b>${r.c.short}</b></td><td class="r">${r.n}</td><td class="r">${R(r.g)}</td><td class="r"><b>${R(r.nt)}</b></td><td>${payBadge(r.st)}</td><td><button class="btn sm" onclick="drill('${r.c.n}')">Open</button></td></tr>`).join('')}</table></div></div>`}
+  const c=cpCur(),A=STAFF.filter(x=>x.ci==c.ci&&x.st=='active'),dis=STAFF.filter(x=>x.ci==c.ci&&x.st=='disabled').length,st=S.payroll[c.ci]||'draft',tot=A.reduce((a,x)=>a+net(x),0),mgr=feeRole();
+  return `<div class="grid g3" style="margin-bottom:14px"><div class="card kpi" style="margin:0"><div class="l">Net payable</div><div class="v">${R(tot)}</div></div><div class="card kpi" style="margin:0"><div class="l">Advances recovered</div><div class="v">${R(A.reduce((a,x)=>a+x.adv,0))}</div></div><div class="card kpi" style="margin:0"><div class="l">Absence deductions</div><div class="v">${R(A.reduce((a,x)=>a+absDays(x)*x.s/30,0))}</div></div></div>
+  <div class="card"><h3>${c.short} · ${payBadge(st)}</h3>${dis?`<div class="small muted" style="margin-bottom:8px">${dis} disabled staff excluded from this payroll.</div>`:''}<div class="tw"><table><tr><th>Name</th><th>Role</th><th class="r">Basic</th><th class="r">Absent days</th><th class="r">Advance</th><th class="r">Net</th><th></th></tr>
+  ${A.map(x=>`<tr><td><b>${x.n}</b></td><td class="small">${x.r}</td><td class="r">${R(x.s)}</td><td class="r">${absDays(x)}</td><td class="r">${x.adv?R(x.adv):'–'}</td><td class="r"><b>${R(net(x))}</b></td><td><button class="btn sm" onclick="payslip('${x.id}')">Payslip</button></td></tr>`).join('')}</table></div><br>
+  ${st=='draft'?(mgr?`<button class="btn p" onclick="S.payroll[${c.ci}]='approved';toast('Payroll approved');render()">Approve payroll</button>`:`<button class="btn p" onclick="submitPayroll(${c.ci})">Submit to principal for approval</button>`):''}
+  ${st=='submitted'?'<span class="muted">Waiting for the principal’s approval…</span>':''}
+  ${st=='approved'?`<button class="btn p" onclick="S.payroll[${c.ci}]='paid';toast('Marked paid. Bank transfer file (IBFT) exported and payslips ready');render()">Mark paid & export bank file</button>`:''}
+  ${st=='paid'?`<button class="btn g" onclick="toast('Payslips sent on WhatsApp to ${A.length} staff')">Send payslips</button>`:''}</div>`}
+const payBadge=s=>({draft:'<span class="badge b-warn">Draft</span>',submitted:'<span class="badge b-in">Awaiting approval</span>',approved:'<span class="badge b-in">Approved</span>',paid:'<span class="badge b-ok">Paid</span>'}[s]);
+function submitPayroll(ci){const A=STAFF.filter(x=>x.ci==ci&&x.st=='active');S.payroll[ci]='submitted';S.apid=(S.apid||10)+1;S.appr.push({id:S.apid,t:'Payroll – Oct 2026 · '+CP[ci].short,d:R(A.reduce((a,x)=>a+net(x),0))+' for '+A.length+' staff',who:'Accounts',pay:ci});toast('Sent to the principal for approval');render()}
+function payslip(id){const s=STAFF.find(x=>x.id==id);openM(`<div class="receipt"><h4>Payslip · October 2026</h4><div class="c">${s.n} · ${s.r} · ${CP[s.ci].short}</div><div class="row"><span>Basic salary</span><b>${R(s.s)}</b></div><div class="row"><span>Absence deduction (${absDays(s)} day${absDays(s)==1?'':'s'})</span><b class="dn">−${R(absDays(s)*s.s/30)}</b></div><div class="row"><span>Advance recovery</span><b class="dn">−${R(s.adv)}</b></div><div class="row" style="font-size:16px"><b>Net pay</b><b>${R(net(s))}</b></div></div>`)}
+
+// ---------- LEAVE ----------
+function stfLeave(){return advOnly('Leave & substitute cover','Teachers apply from the app; the principal approves; Taleem proposes a free teacher per period. Unpaid leave feeds payroll automatically.',(()=>{
+  const L=LEAVES.filter(l=>{const s=STAFF.find(x=>x.id==l.sid);return inScope(s.ci)}),mgr=feeRole();
+  return `<div class="card"><h3>Leave requests <button class="btn sm" onclick="leaveForm()">+ Record leave</button></h3>${L.map(l=>{const s=STAFF.find(x=>x.id==l.sid);return `<div class="row" style="align-items:flex-start"><div><b>${s.n}</b>${campTag(s)}<div class="muted small">${fd(l.from)}${l.days>1?' – '+fd(l.to):''} · ${l.days} day${l.days>1?'s':''} · ${l.type}${l.type=='Unpaid'?' (deducted from salary)':''} · ${l.note}</div>${l.cover?`<div class="small">Cover: <b>${l.cover}</b></div>`:''}</div>
+   <div class="fl"><span class="badge ${l.status=='Approved'?'b-ok':l.status=='Pending'?'b-warn':'b-bad'}">${l.status}</span>${l.status=='Pending'&&mgr?`<button class="btn sm p" onclick="apprExtra({lid:${l.id}},1);render();toast('Leave approved · cover suggested')">Approve</button><button class="btn sm" onclick="apprExtra({lid:${l.id}},0);render()">Reject</button>`:''}</div></div>`}).join('')||'<div class="muted">No leave requests</div>'}</div>`})())}
+function leaveForm(sid){const mine=sid||(S.role=='teacher'?meT().id:'');
+  openM(`<h2>${S.role=='teacher'?'Apply for leave':'Record leave'}</h2><div class="frm">
+  ${S.role=='teacher'?'':`<div class="f"><label>Staff member</label><select id="ls">${STAFF.filter(x=>inScope(x.ci)&&x.st=='active'&&x.r=='Teacher').slice(0,60).map(x=>`<option value="${x.id}">${x.n}</option>`).join('')}</select></div>`}
+  <div class="f"><label>Type</label><select id="lt"><option>Casual</option><option>Medical</option><option>Unpaid</option></select></div>
+  <div class="f"><label>From</label><input id="lf" type="date" value="2026-10-14"></div><div class="f"><label>To</label><input id="le" type="date" value="2026-10-14"></div></div>
+  <div class="f"><label>Reason</label><input id="ln" placeholder="Reason"></div><br><button class="btn p" onclick="saveLeave('${mine}')">Submit</button>`)}
+function saveLeave(sid){const id=sid||$('#ls').value,f=$('#lf').value,e=$('#le').value||f,days=Math.max(1,Math.round((Date.parse(e)-Date.parse(f))/864e5)+1),s=STAFF.find(x=>x.id==id),mgr=feeRole();
+  const l={id:LEAVES.length+1,sid:id,from:f,to:e,days,type:$('#lt').value,paid:$('#lt').value!='Unpaid',status:'Pending',cover:'',note:$('#ln').value||'—'};LEAVES.push(l);
+  if(mgr){apprExtra({lid:l.id},1)}else{S.apid=(S.apid||10)+1;S.appr.push({id:S.apid,t:'Leave: '+s.n+', '+days+' day'+(days>1?'s':''),d:l.type+' · '+l.note,who:'Teacher',lid:l.id})}
+  closeM();toast(mgr?'Leave recorded':'Leave request sent to the principal');render()}
+// ================= EXAMS & RESULTS, MESSAGES & DIARY =================
+const EXAMS=[{id:'mid',name:'Mid-Term 2026',max:100,when:'28 Sep – 7 Oct'},{id:'sep',name:'Monthly Test – Sep',max:50,when:'14 Sep'},{id:'fin',name:'Final 2026',max:100,when:'7 – 18 Dec',future:true}];
+const EX=id=>EXAMS.find(e=>e.id==id);
+const MK={mid:S.marks,sep:{},fin:{}};
+studs.forEach(s=>{const m=S.marks[s.id],weak=H(s.i,80)<3;m.forEach((v,j)=>{if(weak&&j%2==0)m[j]=Math.max(18,v-30);else if(H(s.i,70+j)<2.5)m[j]=25+Math.floor(H(s.i,90+j)*.14)})});
+studs.forEach(s=>{MK.sep[s.id]=SUBJ.map((_,j)=>Math.max(8,Math.min(50,Math.round(S.marks[s.id][j]*.5+((s.i*13+j*7)%7)-3))))});
+const mk=(ex,s)=>MK[ex][s.id]||(MK[ex][s.id]=SUBJ.map(()=>ex=='mid'?0:null));
+S.exSt={};
+CP.forEach(c=>SECS.forEach((k,i)=>{S.exSt['mid|'+c.ci+'|'+k]=i<14?'published':i<20?'submitted':'draft';S.exSt['sep|'+c.ci+'|'+k]='published'}));
+const exStat=(ex,ci,k)=>EX(ex).future?'none':(S.exSt[ex+'|'+ci+'|'+k]||'draft');
+const stBadge=s=>({published:'<span class="badge b-ok">Published</span>',submitted:'<span class="badge b-in">Submitted</span>',draft:'<span class="badge b-warn">Draft</span>',none:'<span class="badge b-in">Not started</span>'}[s]);
+function secRows(ex,ci,k){const mx=EX(ex).max;return secStudents(ci,k).map(s=>{const m=mk(ex,s),ok=m.every(v=>v!=null),t=ok?m.reduce((a,b)=>a+b,0):null;return{s,m,t,p:ok?t/(6*mx)*100:null,f:m.filter(v=>v!=null&&v<mx*.4).length}})}
+function secStats(ex,ci,k){const r=secRows(ex,ci,k).filter(x=>x.t!=null);if(!r.length)return{n:0,avg:0,pass:0,top:null};
+  const top=r.reduce((a,b)=>b.t>a.t?b:a);return{n:r.length,avg:Math.round(r.reduce((a,x)=>a+x.p,0)/r.length),pass:Math.round(r.filter(x=>x.f==0).length/r.length*100),top}}
+const myExSecs=()=>S.role=='teacher'?meT().cts:SECS;
+
+P.exams=()=>{const teach=S.role=='teacher',tabs=teach?[['mk','Marks entry'],['sch','Datesheet']]:[['mk','Marks entry'],['res','Results & analysis'],['sch','Datesheet']];
+  const t=tabs.some(x=>x[0]==S.tab.ex)?S.tab.ex:'mk';S.tab.ex=t;if(!S.exId)S.exId='mid';
+  return `<h2>Exams & Results</h2><div class="sub">Enter marks once → grades, positions, report cards → publish to parents</div>`+tab('ex',tabs,'mk')+({mk:exMarks,res:exRes,sch:exSched}[t])()};
+const exPick=()=>`<select style="width:auto" onchange="S.exId=this.value;render()">${EXAMS.map(e=>`<option value="${e.id}" ${S.exId==e.id?'selected':''}>${e.name}</option>`).join('')}</select>`;
+function exMarks(){
+  if(S.campus=='All Campuses')return `<div class="card"><h3>Choose a campus to enter or review marks</h3>${CP.map(c=>{const n=SECS.filter(k=>exStat(S.exId,c.ci,k)=='published').length;return `<div class="row"><span><b>${c.short}</b> <span class="muted small">${c.pr}</span></span><span><span class="badge b-in">${n}/${SECS.length} published</span> <button class="btn sm" onclick="drill('${c.n}')">Open</button></span></div>`}).join('')}</div>`;
+  const c=cpCur(),ex=EX(S.exId),mine=myExSecs(),mgr=S.role!='teacher';
+  let key=S.cls+'-'+S.sec;if(!mine.includes(key)){key=mine[0];[S.cls,S.sec]=secSplit(key)}
+  if(ex.future)return `<div class="card"><div class="fl">${exPick()}</div><br><div class="demo-note">${ex.name} starts ${ex.when}. Marks entry opens after each paper. See the Datesheet tab.</div></div>`;
+  const rows=secRows(S.exId,c.ci,key),st=exStat(S.exId,c.ci,key),locked=st=='published',mx=ex.max,tch=secTeacher(c.ci,key);
+  const sorted=rows.filter(r=>r.t!=null).slice().sort((a,b)=>b.t-a.t),pos={};sorted.forEach((r,i)=>pos[r.s.id]=i+1);
+  const avg=SUBJ.map((_,j)=>Math.round(rows.reduce((a,r)=>a+(r.m[j]||0),0)/rows.length));
+  return `<div class="card"><div class="fl" style="margin-bottom:12px">${exPick()}
+  ${S.role=='teacher'&&mine.length==1?`<b>${secName(key)}</b>`:S.role=='teacher'?`<select style="width:auto" onchange="[S.cls,S.sec]=secSplit(this.value);render()">${mine.map(k=>`<option value="${k}" ${k==key?'selected':''}>${secName(k)}</option>`).join('')}</select>`:
+   `<select style="width:auto" onchange="S.cls=this.value;render()">${CL.map(x=>`<option ${S.cls==x?'selected':''}>${x}</option>`).join('')}</select><select style="width:auto" onchange="S.sec=this.value;render()">${AB.map(x=>`<option ${S.sec==x?'selected':''}>${x}</option>`).join('')}</select>`}
+  <span class="muted">Class teacher: ${tch?tch.n:'vacant'}</span>${stBadge(st)}<div style="flex:1"></div><button class="btn sm" onclick="toast('Marks template downloaded; upload the filled Excel to import')">⬇ Excel</button></div>
+  <div class="tw"><table><tr><th>Student</th>${SUBJ.map(x=>`<th>${x}</th>`).join('')}<th class="r">Total</th><th>%</th><th>Grade</th><th>Pos</th><th></th></tr>
+  ${rows.map(r=>`<tr><td><b>${r.s.name}</b></td>${r.m.map((v,j)=>`<td><input type="number" min="0" max="${mx}" style="width:56px;padding:4px 6px;${v!=null&&v<mx*.4?'border-color:var(--bad)':''}" value="${v==null?'':v}" ${locked?'disabled':''} onchange="setMark('${r.s.id}',${j},this.value)"></td>`).join('')}
+   <td class="r">${r.t==null?'–':`<b>${r.t}</b>/${mx*6}`}</td><td>${r.p==null?'–':r.p.toFixed(0)+'%'}</td><td>${r.p==null?'–':`<span class="badge ${r.f?'b-bad':r.p>=80?'b-ok':r.p>=60?'b-in':'b-warn'}">${r.f?'Fail':grade(r.p)}</span>`}</td><td>${pos[r.s.id]||'–'}</td><td><button class="btn sm" onclick="repCard(${r.s.i},'${S.exId}')">Report card</button></td></tr>`).join('')}
+   <tr style="font-weight:700"><td>Class average</td>${avg.map(a=>`<td>${a}</td>`).join('')}<td colspan="5"></td></tr></table></div>
+  <div class="fl" style="margin-top:12px"><span class="muted small">Red = below pass mark (40%). Edit any mark and totals, grades and positions update live.</span><div style="flex:1"></div>
+   ${st=='draft'?(mgr?`<button class="btn g" onclick="exSet('${key}','published')">Publish to parents</button>`:`<button class="btn g" onclick="exSet('${key}','submitted')">Submit to principal</button>`):''}
+   ${st=='submitted'?(mgr?`<button class="btn" onclick="exSet('${key}','draft')">Return to teacher</button><button class="btn g" onclick="exSet('${key}','published')">Publish to parents</button>`:'<span class="muted small">Waiting for principal to publish…</span>'):''}
+   ${st=='published'&&mgr?`<button class="btn" onclick="exSet('${key}','submitted')">Unlock for changes</button>`:''}
+   ${mgr&&SECS.some(k=>exStat(S.exId,c.ci,k)=='submitted')?`<button class="btn p" onclick="exPublishAll()">Publish all submitted (${SECS.filter(k=>exStat(S.exId,c.ci,k)=='submitted').length})</button>`:''}</div></div>`}
+function setMark(id,j,v){const mx=EX(S.exId).max,a=MK[S.exId][id];a[j]=v===''?null:Math.max(0,Math.min(mx,+v||0));render()}
+function exSet(k,st){const c=cpCur();S.exSt[S.exId+'|'+c.ci+'|'+k]=st;
+  if(st=='published'){const n=secStudents(c.ci,k).length;S.hist.unshift({t:EX(S.exId).name+' results published for '+secName(k),a:secName(k)+' parents',ty:'Notice',ch:['App','WhatsApp'],sent:n,del:Math.round(n*.97),read:Math.round(n*.4),tm:'Just now',ci:c.ci,by:S.role=='teacher'?meT().n:'Principal'});S.log.unshift('Results published → '+secName(k)+' ('+n+' parents)')}
+  toast(st=='published'?'Results published to parents of '+secName(k):st=='submitted'?'Submitted to the principal':'Returned to teacher');render()}
+function exPublishAll(){const c=cpCur();let n=0;SECS.forEach(k=>{if(exStat(S.exId,c.ci,k)=='submitted'){S.exSt[S.exId+'|'+c.ci+'|'+k]='published';n++}});S.hist.unshift({t:EX(S.exId).name+' results published for '+n+' classes',a:'Whole campus',ty:'Notice',ch:['App','WhatsApp'],sent:c.stu,del:Math.round(c.stu*.97),read:0,tm:'Just now',ci:c.ci,by:'Principal'});toast(n+' classes published to parents');render()}
+function exRes(){
+  const ex=EX(S.exId),all=S.campus=='All Campuses';
+  if(ex.future)return `<div class="card"><div class="fl">${exPick()}</div><br><div class="demo-note">No results yet for ${ex.name}.</div></div>`;
+  if(all){const rows=CP.map(c=>{let n=0,avg=0,ps=0,pub=0;SECS.forEach(k=>{const s=secStats(S.exId,c.ci,k);if(s.n){n++;avg+=s.avg;ps+=s.pass}if(exStat(S.exId,c.ci,k)=='published')pub++});return {c,avg:Math.round(avg/n),ps:Math.round(ps/n),pub}});
+    return `<div class="card"><div class="fl" style="margin-bottom:10px">${exPick()}</div><div class="tw"><table><tr><th>Campus</th><th>Principal</th><th class="r">Average</th><th class="r">Pass rate</th><th class="r">Classes published</th><th></th></tr>${rows.map(r=>`<tr><td><b>${r.c.short}</b></td><td>${r.c.pr}</td><td class="r"><b>${r.avg}%</b></td><td class="r"><span class="badge ${r.ps>=85?'b-ok':'b-warn'}">${r.ps}%</span></td><td class="r">${r.pub}/${SECS.length}</td><td><button class="btn sm" onclick="drill('${r.c.n}')">Open</button></td></tr>`).join('')}</table></div></div>`}
+  const c=cpCur(),rows=SECS.map(k=>({k,t:secTeacher(c.ci,k),st:secStats(S.exId,c.ci,k),status:exStat(S.exId,c.ci,k)})),pool=[];
+  SECS.forEach(k=>secRows(S.exId,c.ci,k).forEach(r=>{if(r.t!=null)pool.push(r)}));
+  const avg=Math.round(pool.reduce((a,r)=>a+r.p,0)/pool.length),pass=Math.round(pool.filter(r=>r.f==0).length/pool.length*100),subj=SUBJ.map((x,j)=>Math.round(pool.reduce((a,r)=>a+r.m[j],0)/pool.length/ex.max*100));
+  const top=pool.slice().sort((a,b)=>b.p-a.p).slice(0,5),weak=pool.filter(r=>r.f>=2).sort((a,b)=>b.f-a.f||a.p-b.p).slice(0,8);
+  return `<div class="grid g4" style="margin-bottom:14px"><div class="card kpi"><div class="l">Campus average</div><div class="v">${avg}%</div></div><div class="card kpi"><div class="l">Pass rate</div><div class="v ${pass>=85?'up':'dn'}">${pass}%</div></div><div class="card kpi"><div class="l">Classes published</div><div class="v">${rows.filter(r=>r.status=='published').length}/${SECS.length}</div></div><div class="card kpi"><div class="l">Failing 2+ subjects</div><div class="v dn">${pool.filter(r=>r.f>=2).length}</div></div></div>
+  <div class="grid g32"><div><div class="card"><h3>By class <span class="fl">${exPick()}<button class="btn sm" onclick="dlCSV('results-${S.exId}',[['Class','Class teacher','Status','Average %','Pass %','Topper']].concat(${JSON.stringify(rows.map(r=>[secName(r.k),r.t?r.t.n:'',r.status,r.st.avg,r.st.pass,r.st.top?r.st.top.s.name:'']))}))">⬇ Excel</button></span></h3>
+   <div class="tw"><table><tr><th>Class</th><th>Teacher</th><th>Status</th><th class="r">Avg</th><th class="r">Pass</th><th>Topper</th></tr>${rows.map(r=>`<tr class="click" onclick="S.cls=secSplit('${r.k}')[0];S.sec=secSplit('${r.k}')[1];S.tab.ex='mk';render()"><td><b>${secName(r.k)}</b></td><td class="small">${r.t?r.t.n:'vacant'}</td><td>${stBadge(r.status)}</td><td class="r">${r.st.avg}%</td><td class="r"><span class="badge ${r.st.pass>=85?'b-ok':'b-warn'}">${r.st.pass}%</span></td><td class="small">${r.st.top?r.st.top.s.name:'–'}</td></tr>`).join('')}</table></div></div></div>
+  <div><div class="card"><h3>Subject averages</h3>${SUBJ.map((x,j)=>`<div class="row small"><span style="width:80px">${x}</span><div class="bar" style="flex:1"><i style="width:${subj[j]}%;background:${subj[j]<60?'var(--bad)':'var(--brand)'}"></i></div><b>${subj[j]}%</b></div>`).join('')}</div>
+   <div class="card"><h3>Top 5 students</h3>${top.map((r,i)=>`<div class="row small"><span>${i+1}. <b>${r.s.name}</b> <span class="muted">${r.s.cls}-${r.s.sec}</span></span><b>${r.p.toFixed(0)}%</b></div>`).join('')}</div>
+   <div class="card"><h3>Need support <span class="badge b-bad">${pool.filter(r=>r.f>=2).length}</span></h3>${weak.map(r=>`<div class="row small"><span><b>${r.s.name}</b> <span class="muted">${r.s.cls}-${r.s.sec}</span></span><span><span class="badge b-bad">${r.f} fail</span> <button class="btn sm g" onclick="toast('Meeting request sent to ${r.s.father}')">Call parent</button></span></div>`).join('')}</div></div></div>`}
+function exSched(){const rows=[['Mon 7 Dec','English','9:00 – 11:00'],['Tue 8 Dec','Urdu','9:00 – 11:00'],['Wed 9 Dec','Math','9:00 – 11:30'],['Fri 11 Dec','Science','9:00 – 11:00'],['Sat 12 Dec','Islamiat','9:00 – 10:30'],['Mon 14 Dec','Social Studies','9:00 – 11:00']];
+  return `<div class="card"><h3>${EX('fin').name} · datesheet ${S.role=='teacher'?'':'<button class="btn sm g" onclick="pubSheet()">Publish to parents</button>'}</h3><div class="tw"><table><tr><th>Date</th><th>Paper</th><th>Time</th><th>Classes</th></tr>${rows.map(r=>`<tr><td>${r[0]}</td><td><b>${r[1]}</b></td><td>${r[2]}</td><td>All classes · ${S.campus=='All Campuses'?'all campuses':S.campus}</td></tr>`).join('')}</table></div></div>`}
+function pubSheet(){const c=cpCur();S.hist.unshift({t:'Final 2026 datesheet: 7 – 14 Dec. Details in the app.',a:S.campus=='All Campuses'?'All parents':'Whole campus',ty:'Notice',ch:['App','WhatsApp'],sent:c.stu,del:0,read:0,tm:'Just now',pend:1,ci:c.ci,by:'Principal'});S.tab.com='hist';go('comms');toast('Datesheet sent to '+c.stu+' parents');simSend()}
+function repCard(i,exId){exId=exId||S.exId||'mid';const s=studs[i],ex=EX(exId),m=mk(exId,s),mx=ex.max,t=m.reduce((a,b)=>a+(b||0),0),p=t/(6*mx)*100,k=s.cls+'-'+s.sec,rk=secRows(exId,s.ci,k).filter(r=>r.t!=null).sort((a,b)=>b.t-a.t).findIndex(r=>r.s.id==s.id)+1,n=secStudents(s.ci,k).length,fails=m.filter(v=>v<mx*.4).length;
+  openM(`<div class="rc"><h4>Al-Noor Grammar School · ${CP[s.ci].short}</h4><div class="muted small" style="text-align:center">${ex.name} Report Card · Class ${s.cls}-${s.sec}</div><br>
+  <div class="row"><span>Name</span><b>${s.name}</b></div><div class="row"><span>Roll no / Father</span><b>${s.id} · ${s.father}</b></div>
+  <table style="margin:8px 0"><tr><th>Subject</th><th class="r">Marks</th><th class="r">Out of</th><th>Grade</th></tr>${SUBJ.map((x,j)=>`<tr><td>${x}</td><td class="r ${m[j]<mx*.4?'dn':''}">${m[j]}</td><td class="r">${mx}</td><td>${grade(m[j]/mx*100)}</td></tr>`).join('')}
+  <tr><td><b>Total</b></td><td class="r"><b>${t}</b></td><td class="r">${mx*6}</td><td><b>${grade(p)}</b></td></tr></table>
+  <div class="row"><span>Percentage</span><b>${p.toFixed(1)}%</b></div><div class="row"><span>Position in class</span><b>${rk} of ${n}</b></div><div class="row"><span>Result</span><b class="${fails?'dn':'up'}">${fails?'Needs improvement ('+fails+' subject'+(fails>1?'s':'')+' below pass mark)':'Pass'}</b></div><div class="row"><span>Attendance (Oct)</span><b>${stPct(s)}%</b></div>
+  <div class="small muted" style="margin-top:8px">Remarks: ${fails?'Needs extra attention; please meet the class teacher.':p>=80?'Excellent performance. Keep it up!':'Good effort; can improve in weaker subjects.'}</div>
+  <div class="fl" style="justify-content:space-between;margin-top:22px"><span class="small">_________<br>Class teacher</span><span class="small">_________<br>Principal</span></div></div><br>
+  <div class="fl"><button class="btn p" onclick="toast('PDF downloaded')">Download PDF</button><button class="btn g" onclick="toast('Sent to ${s.father} on WhatsApp')">Send to parent</button></div>`)}
+
+// ---------- MESSAGES ----------
+const TPL={'Notice':'Dear parents, [your notice here]. – Al-Noor Grammar School','Homework / diary':'Homework – {class}\n[Subject]: [details].\n– {teacher}','Fee reminder':"Assalam o Alaikum {father} sahib, {student}'s fee of {amount} is pending. Please pay via 1Bill, JazzCash/Easypaisa or at school. – Al-Noor Grammar School",'Emergency':'⚠️ IMPORTANT: School will close early today at 12:00. Please arrange pick-up. – Principal'};
+const HOME={};S.cm={type:'Homework / diary',to:'',msg:TPL['Homework / diary'],app:1,wa:1,sms:0,when:'Now',sched:''};
+const MSG_TYPES=()=>S.role=='teacher'?['Notice','Homework / diary']:S.role=='accounts'?['Notice','Fee reminder']:['Notice','Homework / diary','Fee reminder','Emergency'];
+const uniq=L=>new Set(L.map(s=>s.phone)).size;
+function audiences(){
+  if(S.role=='teacher'){const m=meT();return m.cts.map(k=>({k:'sec:'+k,l:secName(k),st:secStudents(m.ci,k)}))}
+  const A=[];
+  if(S.campus=='All Campuses'){A.push({k:'all',l:'All campuses · all parents',st:studs});CP.forEach(c=>A.push({k:'c:'+c.ci,l:c.short+' campus · all parents',st:studs.slice(c.first,c.last)}));A.push({k:'def',l:'Defaulters only (all campuses)',st:defRows().map(r=>r.s)});return A}
+  const c=cpCur(),st=studs.slice(c.first,c.last);A.push({k:'all',l:'Whole campus',st});
+  if(S.role!='accounts')CL.forEach(x=>A.push({k:'cl:'+x,l:'Class '+x+' (all sections)',st:st.filter(s=>s.cls==x)}));
+  A.push({k:'def',l:'Defaulters only',st:defRows().map(r=>r.s)});if(T()=='a'&&S.role!='accounts')A.push({k:'van',l:'Transport · van students',st:st.filter(s=>s.van)});return A}
+function comNew(){
+  const cm=S.cm,types=MSG_TYPES(),A=audiences();if(!types.includes(cm.type)){cm.type=types[0];cm.msg=TPL[cm.type]}
+  if(!A.some(a=>a.k==cm.to))cm.to=(cm.type=='Fee reminder'&&A.find(a=>a.k=='def')?'def':A[0].k);
+  const aud=A.find(a=>a.k==cm.to),np=uniq(aud.st),f=aud.st[0],prev=cm.msg.replace('{student}',f?f.name:'Student').replace('{father}',f?f.father:'Parent').replace('{amount}',f?R(owedOf(f)):'Rs 0').replace('{class}',f?'Class '+f.cls+'-'+f.sec:'Class').replace('{teacher}',S.role=='teacher'?meT().n:'Class teacher');
+  return `<div class="grid g2"><div class="card"><h3>New message</h3>
+  <div class="f"><label>Type</label><div class="fl">${types.map(x=>`<span class="chip ${cm.type==x?'on':''}" onclick="S.cm.type='${x}';S.cm.msg=TPL['${x}'];S.cm.to='';render()">${x}</span>`).join('')}</div></div>
+  <div class="f"><label>To</label><select onchange="S.cm.to=this.value;render()">${A.map(a=>`<option value="${a.k}" ${a.k==cm.to?'selected':''}>${a.l} (${uniq(a.st)} parents)</option>`).join('')}</select></div>
+  <div class="f"><label>Message <span class="muted">· ${cm.msg.length} characters · {student} {father} {amount} {class} are filled in per parent</span></label><textarea oninput="S.cm.msg=this.value;$('#prev').textContent=this.value" style="min-height:110px">${cm.msg}</textarea></div>
+  <div class="f"><label>Send via</label><div class="small"><label><input type="checkbox" style="width:auto" ${cm.app?'checked':''} onchange="S.cm.app=this.checked?1:0"> Parent app</label> &nbsp; <label><input type="checkbox" style="width:auto" ${cm.wa?'checked':''} onchange="S.cm.wa=this.checked?1:0"> WhatsApp</label> &nbsp; ${T()=='a'?`<label><input type="checkbox" style="width:auto" ${cm.sms?'checked':''} onchange="S.cm.sms=this.checked?1:0"> SMS fallback</label>`:'☐ SMS fallback <span class="badge b-adv">Adv</span>'}</div></div>
+  <div class="f"><label>When</label><select onchange="S.cm.when=this.value;render()"><option ${cm.when=='Now'?'selected':''}>Now</option><option ${cm.when=='Today 2:00 pm (after school)'?'selected':''}>Today 2:00 pm (after school)</option>${T()=='a'?`<option ${cm.when=='Schedule…'?'selected':''}>Schedule…</option>`:''}</select>${cm.when=='Schedule…'?`<input type="datetime-local" style="margin-top:6px" value="${cm.sched||'2026-10-13T08:00'}" onchange="S.cm.sched=this.value">`:''}</div>
+  <button class="btn ${cm.type=='Emergency'?'':'p'}" ${cm.type=='Emergency'?'style="background:var(--bad);color:#fff"':''} onclick="comSend()">${cm.type=='Emergency'?'Send emergency alert':'Send'} to ${np} parent${np==1?'':'s'}</button></div>
+  <div class="card"><h3>What parents see on WhatsApp</h3>${wa(`<span id="prev">${prev.replace(/</g,'&lt;')}</span>`,'13:05')}<div class="small muted" style="margin-top:8px">Sent from the school's verified WhatsApp number. Parents see it in Urdu or English as you write it.</div></div></div>`}
+function comSend(){const cm=S.cm,A=audiences(),aud=A.find(a=>a.k==cm.to),n=uniq(aud.st);
+  if(!cm.msg.trim())return toast('Write a message first');if(!cm.app&&!cm.wa)return toast('Choose at least one channel');
+  if(cm.type=='Emergency'&&!window.confirm_em){openM(`<h2>Send emergency alert?</h2><div class="sub">${n} parents get this on every channel immediately.</div>${wa(cm.msg,nowT())}<br><div class="fl"><button class="btn" style="background:var(--bad);color:#fff" onclick="window.confirm_em=1;closeM();comSend();window.confirm_em=0">Yes, send now</button><button class="btn" onclick="closeM()">Cancel</button></div>`);return}
+  const ch=[];if(cm.app)ch.push('App');if(cm.wa)ch.push('WhatsApp');if(cm.sms&&T()=='a')ch.push('SMS');
+  const sch=cm.when=='Schedule…'?cm.sched:'',c=cpOf(S.campus);
+  S.hist.unshift({t:cm.msg.replace(/\n/g,' ').slice(0,70),full:cm.msg,a:aud.l.replace(/ \(.*/,''),ty:cm.type,ch,sent:n,del:0,read:0,tm:sch?'Scheduled '+sch.replace('T',' '):'Just now',pend:sch?0:1,sched:!!sch,ci:c?c.ci:-1,by:S.role=='teacher'?meT().n:S.role=='accounts'?'Accounts':S.role=='owner'?'Owner':'Principal office'});
+  if(cm.type=='Fee reminder'){S.rem=S.rem||{};aud.st.forEach(s=>S.rem[s.i]='12 Oct');S.log.unshift('Fee reminder → '+n+' parents')}
+  S.tab.com='hist';toast(sch?'Scheduled for '+sch.replace('T',' '):'Sending to '+n+' parents…');render();simSend()}
+function simSend(){setTimeout(()=>{S.hist.filter(x=>x.pend).forEach(h=>{h.pend=0;h.del=Math.round(h.sent*(h.ty=='Emergency'?.99:.97));h.read=Math.round(h.sent*(h.ty=='Emergency'?.9:.62))});if(S.page=='comms')render()},1600)}
+// seed history
+[['Notice: Parent-Teacher Meeting, Sat 17 Oct 9am–1pm','All campuses · all parents','Notice',['App','WhatsApp'],2261,'Yesterday',-1,'Owner'],
+ ['Fee reminder: October fee due 15 Oct. Pay via 1Bill, JazzCash or at school.','Whole campus','Fee reminder',['App','WhatsApp','SMS'],688,'Yesterday',0,'Accounts'],
+ ['Homework: Class 5 Math – Ex 4.2 (Q1-8). Test on Thursday.','Class 5-A','Homework / diary',['App','WhatsApp'],19,'Yesterday',1,'Mr. Kamran Akhtar'],
+ ['Sports day on Friday 23 Oct. Wear house colours.','Whole campus','Notice',['App','WhatsApp'],442,'2 days ago',1,'Principal office'],
+ ['Van Route 2 running 10 minutes late today.','Transport · van students','Notice',['App','SMS'],81,'2 days ago',0,'Front desk']
+].forEach(h=>{const n=h[4];S.hist.push({t:h[0],full:h[0],a:h[1],ty:h[2],ch:h[3],sent:n,del:Math.round(n*.97),read:Math.round(n*(h[2]=='Fee reminder'?.55:.66)),tm:h[5],ci:h[6],by:h[7]})});
+S.hist=S.hist.filter(h=>h.sent>0&&h.full);
+P.comms=()=>{const t=curTab('com','new');
+  return `<h2>Messages & Diary</h2><div class="sub">One compose box → parent app, WhatsApp and SMS</div>`+tab('com',[['new','Compose'],['hist','Sent'],['out','Automatic messages'],['tpl','Templates'],['chat','Parent chat',1]])+({new:comNew,hist:comHist,out:comOut,tpl:comTpl,chat:comChat}[t])()};
+function comHist(){const L=S.hist.filter(h=>(S.role=='teacher'?h.by==meT().n:(S.campus=='All Campuses'||h.ci==-1||CP[h.ci].n==S.campus))),pg=S.hpg||0;
+  return `<div class="card"><div class="tw"><table><tr><th>Message</th><th>Type</th><th>To</th><th>Channels</th><th>Delivered</th><th>Read</th><th>By</th><th>When</th></tr>
+  ${L.slice(pg*12,pg*12+12).map(h=>`<tr class="click" onclick="histView(${S.hist.indexOf(h)})"><td style="max-width:240px">${h.t}</td><td><span class="badge b-in">${h.ty}</span></td><td class="small">${h.a}</td><td>${h.ch.map(c=>`<span class="badge b-in">${c}</span>`).join(' ')}</td><td>${h.sched?'<span class="badge b-warn">Scheduled</span>':h.pend?'<span class="muted">sending…</span>':h.del+'/'+h.sent}</td><td>${h.sched||h.pend?'—':h.read}</td><td class="small">${h.by}</td><td class="muted small">${h.tm}</td></tr>`).join('')||'<tr><td colspan="8" class="muted" style="text-align:center;padding:20px">Nothing sent yet</td></tr>'}</table></div>${pgBar(L.length,12,pg,'S.hpg')}
+  ${T()=='b'?'<p class="small muted">Advanced I adds per-parent delivery status, automatic SMS fallback and a “not read yet” follow-up list.</p>':''}</div>`}
+function histView(i){const h=S.hist[i],un=h.sent-h.del,nr=h.del-h.read,nm=[];for(let j=0;j<8;j++){const s=studs[(i*37+j*11)%studs.length];nm.push([s.father,s.name,j<(un?1:0)?'Failed':j<5?'Read':'Delivered'])}
+  openM(`<h2>${h.ty}</h2><div class="sub">${h.a} · ${h.ch.join(' + ')} · ${h.tm} · by ${h.by}</div>${wa(h.full.replace(/</g,'&lt;'),'09:00')}<br>
+  <div class="grid g3"><div class="card kpi" style="margin:0"><div class="l">Sent</div><div class="v">${h.sent}</div></div><div class="card kpi" style="margin:0"><div class="l">Delivered</div><div class="v">${h.del}</div></div><div class="card kpi" style="margin:0"><div class="l">Read</div><div class="v">${h.read}</div></div></div><br>
+  ${T()=='a'?`<h3 style="font-size:12px;color:var(--mute);text-transform:uppercase;margin:4px 0">Per-parent status (sample)</h3>${nm.map(n=>`<div class="row small"><span>${n[0]} <span class="muted">(${n[1]})</span></span><span class="badge ${n[2]=='Failed'?'b-bad':n[2]=='Read'?'b-ok':'b-in'}">${n[2]}</span></div>`).join('')}<br>
+  <div class="fl">${un?`<button class="btn a" onclick="toast('SMS sent to ${un} parents')">SMS to ${un} undelivered</button>`:''}${nr?`<button class="btn" onclick="toast('Reminder sent to ${nr} parents who have not read it')">Remind ${nr} unread</button>`:''}</div>`:'<div class="demo-note">Advanced I shows delivery per parent and sends SMS to anyone WhatsApp could not reach.</div>'}`)}
+function comOut(){const L=S.log.length?S.log:['Fee reminder → 3 parents','Absent alert → Imran Khan (Hira Khan)'];return `<div class="card"><h3>Recent automatic messages</h3>${L.slice(0,30).map(l=>`<div class="row small"><span>${l}</span><span class="badge b-ok">Delivered ✓✓</span></div>`).join('')}<p class="small muted">Absent alerts, fee receipts, pickup confirmations and result notices are sent automatically using the templates below.</p></div>`}
+function comTpl(){return `<div class="grid g2">${[['Absence alert',absentMsg(studs[0]).split('\n\n')[1]],['Fee reminder',TPL['Fee reminder']],['Fee receipt','Thank you. Received {amount} for {student}. Balance: {balance}.'],['Pickup confirmation','{student} was picked up by {person} at {time}.']].map(x=>`<div class="card"><h3>${x[0]}<span class="badge ${S.tplEd&&S.tplEd[x[0]]?'b-warn':'b-ok'}">${S.tplEd&&S.tplEd[x[0]]?'re-approval pending':'approved'}</span></h3><div class="small" style="white-space:pre-wrap">${(S.tplEd&&S.tplEd[x[0]])||x[1]}</div><br><button class="btn sm" onclick="tplEdit('${x[0]}')">Edit</button></div>`).join('')}</div>`}
+function tplEdit(n){openM(`<h2>Edit “${n}”</h2><div class="sub">WhatsApp needs to approve changed templates (usually under a day). The old text keeps working until then.</div><textarea id="tpt" style="min-height:120px">${(S.tplEd&&S.tplEd[n])||''}</textarea><br><br><button class="btn p" onclick="S.tplEd=S.tplEd||{};S.tplEd['${n}']=$('#tpt').value||null;closeM();toast('Submitted for WhatsApp approval');render()">Submit for approval</button>`)}
+// ---- parent chat (Advanced) ----
+const THREADS=[];
+(function(){const msgs=[['Why was my son marked late today?','He arrived at 8:12 after the bus; I have noted it.'],['Is there homework for tomorrow?','Yes, Math Ex 4.2 (Q1-8).'],['Can I meet you about the test results?','Of course. Thursday 1:30 pm works.'],['Fee voucher shows a late fine, please check.',''],['Thank you for the update.','']];
+  CP.forEach(c=>{for(let j=0;j<4;j++){const s=secStudents(c.ci,'5-A')[j*3],m=msgs[(c.ci+j)%5];THREADS.push({id:THREADS.length,ci:c.ci,sid:s.i,unread:!m[1],m:[{f:'p',t:m[0],tm:'09:'+pad(10+j*7)}].concat(m[1]?[{f:'t',t:m[1],tm:'09:'+pad(40+j)}]:[])})}})})();
+function comChat(){return advOnly('Parent–teacher chat & PTM scheduler','Parents message the class teacher inside the app (office hours, no personal numbers shared). Book parent-teacher meetings by slot.',(()=>{
+  const L=THREADS.filter(t=>S.role=='teacher'?(t.ci==meT().ci&&studs[t.sid].cls+'-'+studs[t.sid].sec==meT().cts[0]):inScope(t.ci));
+  return `<div class="card"><h3>Conversations <span class="badge b-warn">${L.filter(t=>t.unread).length} unread</span></h3>${L.map(t=>{const s=studs[t.sid];return `<div class="row click" style="cursor:pointer" onclick="threadView(${t.id})"><div><b>${s.father}</b> <span class="muted small">(${s.name}, ${s.cls}-${s.sec})${campTag(s)}</span><div class="small muted">${t.m[t.m.length-1].t}</div></div>${t.unread?'<span class="badge b-warn">New</span>':'›'}</div>`}).join('')||'<div class="muted">No conversations</div>'}</div>`})())}
+function threadView(id){const t=THREADS[id],s=studs[t.sid];t.unread=false;
+  openM(`<h2>${s.father}</h2><div class="sub">Parent of ${s.name} · Class ${s.cls}-${s.sec}</div><div class="chatbg">${t.m.map(x=>`<div style="display:flex;justify-content:${x.f=='t'?'flex-end':'flex-start'};margin-bottom:6px"><div class="wa" style="${x.f=='p'?'background:var(--card);color:var(--ink)':''}">${x.t}<small>${x.tm}</small></div></div>`).join('')}</div><br>
+  <div class="fl"><input id="rp" placeholder="Type a reply…" style="flex:1"><button class="btn p" onclick="threadReply(${id})">Reply</button></div>`);if(S.page=='comms')render()}
+function threadReply(id){const v=$('#rp').value.trim();if(!v)return;THREADS[id].m.push({f:'t',t:v,tm:nowT()});threadView(id);toast('Reply sent')}
+
+// ---------- STAFF ----------
 // ---------- VENDORS ----------
 P.vendors=()=>{
   const t=curTab('ven','list');
@@ -490,9 +1116,9 @@ P.transport=()=>advOnly('Transport','Routes, vans, drivers and route fees. Drive
   <div class="grid g32"><div class="card"><h3>Routes</h3><div class="tw"><table><tr><th>Route</th><th>Van / Driver</th><th class="r">Students</th><th class="r">Fee</th><th>Status</th></tr>
   ${[['Route 1 – Gulberg','LEA-4410 · Aslam',22,2200,'On time'],['Route 2 – Model Town','LEB-7721 · Rafiq',18,2500,'Running 6 min late'],['Route 3 – Johar Town','LES-2205 · Younis',14,3000,'On time']].map(r=>`<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td class="r">${r[2]}</td><td class="r">${R(r[3])}</td><td><span class="badge ${r[4]=='On time'?'b-ok':'b-warn'}">${r[4]}</span></td></tr>`).join('')}</table></div></div>
   <div class="card"><h3>Live map</h3><svg viewBox="0 0 240 160" style="width:100%;background:var(--brand2);border-radius:10px"><path d="M10 140 C60 110 80 60 130 70 S200 30 230 20" fill="none" stroke="var(--adv)" stroke-width="3" stroke-dasharray="6 4"/><circle cx="130" cy="70" r="7" fill="var(--adv)"/><text x="138" y="66" font-size="10" fill="currentColor">Van 2</text><circle cx="230" cy="20" r="6" fill="var(--ok)"/><text x="190" y="14" font-size="10" fill="currentColor">School</text></svg><div class="small muted">Van 2 · 6 min from school · 11 students on board</div></div></div>`);
-P.campuses=()=>advOnly('Multi-campus','See every campus on one screen: collection, defaulters, attendance, staff and budgets. Compare campuses and drill into any one.',`<h2>Campuses</h2><div class="sub">Group view — all campuses</div><div class="card"><div class="tw"><table><tr><th>Campus</th><th class="r">Students</th><th class="r">Collected (Oct)</th><th class="r">Outstanding</th><th class="r">Attendance</th><th class="r">Staff</th></tr>
-  ${[['Main Campus',72,2615000,tot(),92,12],['Johar Town',45,1620000,tot()*.62,89,8],['Model Town',34,1245000,tot()*.48,94,7]].map(r=>`<tr class="click" onclick="S.campus='${r[0]}${r[0]=='Main Campus'?'':' Campus'}';setTier('a')"><td><b>${r[0]}</b></td><td class="r">${r[1]*8}</td><td class="r">${R(r[2])}</td><td class="r dn">${R(r[3])}</td><td class="r">${r[4]}%</td><td class="r">${r[5]}</td></tr>`).join('')}</table></div></div>
-  <div class="card"><h3>Collection rate vs target</h3>${[['Main',76],['Johar Town',71],['Model Town',84]].map(c=>`<div class="row small"><span style="width:90px">${c[0]}</span><div class="bar" style="flex:1"><i style="width:${c[1]}%"></i></div><b>${c[1]}%</b></div>`).join('')}</div>`);
+P.campuses=()=>advOnly('Multi-campus','See every campus on one screen: collection, defaulters, attendance, staff and budgets. Compare campuses and drill into any one.',`<h2>Campuses</h2><div class="sub">Group view — all campuses</div><div class="card"><div class="tw"><table><tr><th>Campus</th><th>Principal</th><th class="r">Students</th><th class="r">Collected (Oct)</th><th class="r">To receive</th><th class="r">Attendance</th><th class="r">Staff</th></tr>
+  ${CP.map(c=>`<tr class="click" onclick="drill('${c.n}');go('dash')"><td><b>${c.n}</b></td><td>${c.pr}</td><td class="r">${c.stu}</td><td class="r">${R(c.col)}</td><td class="r dn">${R(cpRec(c))}</td><td class="r">${c.att}%</td><td class="r">${c.staff}</td></tr>`).join('')}</table></div></div>
+  <div class="card"><h3>Collection rate vs target</h3>${CP.map(c=>`<div class="row small"><span style="width:110px">${c.short}</span><div class="bar" style="flex:1"><i style="width:${cpPct(c)}%"></i></div><b>${cpPct(c)}%</b></div>`).join('')}</div>`);
 
 // ---------- SETTINGS ----------
 P.settings=()=>{const t=curTab('set','roles');
@@ -505,7 +1131,7 @@ function setNotif(){return `<div class="card">${[['Absent alert to parent','Inst
 function setData(){return `<div class="card"><div class="row"><span>Last cloud backup</span><b>Today 03:00 am ✓</b></div><div class="row"><span>Your data</span><button class="btn sm" onclick="toast('Full export (Excel + PDFs) is emailed to the owner')">Export everything</button></div><div class="row"><span>Offline mode</span><span class="badge b-ok">Attendance & fee desk keep working; sync when internet returns</span></div></div>`}
 
 // ---------- INIT ----------
-setTier('b');
+setTier('a');
 </script>
 </body>
 </html>
