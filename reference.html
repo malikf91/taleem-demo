@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Taleem Demo Guide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: sticky page list on the left, one card per page on the right; search filters every line. Blue taken from the Taleem product itself. */
+:root{
+  --bg:#f3f5f9; --card:#ffffff; --ink:#16243d; --mute:#5d6b84; --line:#e0e6f0;
+  --brand:#1b5fb5; --brand-soft:#e6f0fc; --adv:#7a4fd0; --adv-soft:#f0e9fc;
+  --warn:#9a5b00; --warn-soft:#fff3dc; --ok:#1e7a45; --ok-soft:#e5f6ec; --mark:#ffe58a;
+  --font:'Public Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1522; --card:#162133; --ink:#e6edf8; --mute:#93a4be; --line:#263650;
+  --brand:#5aa0f2; --brand-soft:#16304f; --adv:#b394f0; --adv-soft:#2a2144;
+  --warn:#f0b04a; --warn-soft:#352b18; --ok:#58c98a; --ok-soft:#173326; --mark:#6b5a12; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1522; --card:#162133; --ink:#e6edf8; --mute:#93a4be; --line:#263650;
+  --brand:#5aa0f2; --brand-soft:#16304f; --adv:#b394f0; --adv-soft:#2a2144;
+  --warn:#f0b04a; --warn-soft:#352b18; --ok:#58c98a; --ok-soft:#173326; --mark:#6b5a12; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 60px}
+.wrap{max-width:1180px;margin:0 auto}
+header.top{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
+h1{margin:0;font-size:28px;line-height:1.15;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--mute);margin:4px 0 0;max-width:60ch}
+.search{flex:1 1 280px;max-width:420px}
+.search input{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 14px}
+.search input:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+.count{font-size:12px;color:var(--mute);margin-top:4px;min-height:18px}
+.layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:22px;align-items:start}
+nav.toc{position:sticky;top:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;max-height:calc(100vh - 24px);overflow:auto}
+nav.toc a{display:block;padding:7px 10px;border-radius:8px;color:var(--ink);text-decoration:none;font-size:14px}
+nav.toc a:hover,nav.toc a:focus-visible{background:var(--brand-soft);outline:none}
+nav.toc .grp{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);padding:10px 10px 4px}
+section.page{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:16px;scroll-margin-top:12px}
+section.page h2{margin:0 0 2px;font-size:21px;letter-spacing:-.005em}
+.path{font-size:12.5px;color:var(--mute);margin:0 0 4px}
+.who{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 14px}
+.tag{font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:99px;background:var(--brand-soft);color:var(--brand);white-space:nowrap}
+.tag.adv{background:var(--adv-soft);color:var(--adv)}
+.lead{color:var(--mute);margin:0 0 12px;max-width:68ch}
+h3{margin:18px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute)}
+dl{margin:0;display:grid;grid-template-columns:minmax(150px,230px) minmax(0,1fr);gap:0 20px}
+dt{font-weight:600;padding:9px 0;border-top:1px solid var(--line)}
+dd{margin:0;padding:9px 0;border-top:1px solid var(--line);max-width:72ch}
+dt:first-of-type,dt:first-of-type+dd{border-top:0}
+dt .tag{margin-left:6px;vertical-align:1px}
+.note{background:var(--warn-soft);color:var(--warn);border-radius:10px;padding:10px 14px;margin:12px 0 0;font-size:14px}
+.note b{font-weight:700}
+.good{background:var(--ok-soft);color:var(--ok)}
+mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
+.empty{padding:30px;text-align:center;color:var(--mute)}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 2px}
+.flow span.s{background:var(--brand-soft);color:var(--brand);border-radius:8px;padding:5px 10px;font-weight:600;font-size:13.5px}
+.flow span.a{color:var(--mute)}
+details{border-top:1px solid var(--line);padding:10px 0}
+details:first-of-type{border-top:0}
+summary{cursor:pointer;font-weight:600}
+summary:focus-visible{outline:2px solid var(--brand);outline-offset:3px;border-radius:4px}
+details p{margin:6px 0 0;max-width:72ch}
+@media (max-width:860px){
+  .layout{grid-template-columns:minmax(0,1fr)}
+  nav.toc{position:static;max-height:none;display:flex;gap:6px;overflow-x:auto;padding:8px}
+  nav.toc a{white-space:nowrap;flex:0 0 auto;background:var(--bg)}
+  nav.toc .grp{display:none}
+  dl{grid-template-columns:minmax(0,1fr)}
+  dt{padding-bottom:0}
+  dd{border-top:0;padding-top:2px}
+  section.page{padding:16px}
+}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+html{scroll-behavior:smooth}
+</style>
+</head><body>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Taleem demo guide</h1>
+      <p class="sub">One page per screen of the demo, with a one-line meaning for every card, tab and button. Type in the search box to find any term.</p>
+    </div>
+    <div class="search">
+      <input id="q" type="search" placeholder="Search, e.g. net surplus, voucher, arrears…" aria-label="Search the guide" autocomplete="off">
+      <div class="count" id="count"></div>
+    </div>
+  </header>
+  <div class="layout">
+    <nav class="toc" id="toc" aria-label="Pages"></nav>
+    <main id="main"></main>
+  </div>
+</div>
+
+<script>
+/* ---- content ---------------------------------------------------------------
+   Each page: id, title, path (where to click), who (roles), adv (Advanced I only),
+   lead (one sentence), groups: [{h, rows:[[name, meaning, optional 'adv']]}], note (optional) */
+var PAGES = [
+{id:"start",title:"Before you start",path:"Top bar of the demo",who:[],lead:"Four switches at the top change everything on screen. Know these first.",
+ groups:[{h:"The top bar",rows:[
+  ["Campus selector (top left)","Picks which school branch you are looking at. Only the owner can pick All Campuses; everyone else picks one branch. Every number on every page changes with it."],
+  ["View as (top right)","Switches the person using the system: Owner, Branch Principal, Accounts clerk, Front desk / Gate, or Teacher. Each one sees a different menu and a different dashboard."],
+  ["EN / اردو","Switches the whole screen to Urdu and flips it right to left. Names, amounts and the text of WhatsApp messages stay as written."],
+  ["Basic / Advanced I","Basic is one campus with the everyday tools. Advanced I adds the multi-campus group view, online payments, leave and cover, parent chat, transport, admissions CRM, SMS fallback and scheduled messages. Pages marked ‘Adv’ show a lock in Basic."]]},
+  {h:"Good to know about the sample data",rows:[
+  ["Today's date","The demo is set to Monday 12 October 2026. October fees are due on the 15th, so they are not overdue yet. August and September are."],
+  ["The school","Al-Noor Grammar School, 5 campuses (Main, Johar Town, Model Town, DHA Phase 5, Bahria Town), 2,261 students, 161 staff. All names and amounts are made up."],
+  ["Bahria Town","Built to look weak on purpose: low fee collection, unpaid salaries, a deficit. Use it to show how the owner spots a problem campus."],
+  ["Reload resets everything","Everything you add or change lives only in the open page. Reload the page to start again from the same sample data."]]}],
+ note:"Suggested 15-minute path: owner dashboard → click Bahria Town → switch to Accounts clerk → Fees (Generate, Vouchers, Collect, Day close) → switch to Teacher and mark attendance → back to Branch Principal for Staff and publishing exam results."},
+
+{id:"dashboard",title:"Dashboard",path:"Left menu → Dashboard",who:["Owner","Branch Principal","Accounts clerk","Front desk","Teacher"],lead:"Every role gets its own first screen. The owner sees the whole group, the principal sees one campus, the accountant sees money in and out, the teacher sees their class.",
+ groups:[
+ {h:"Owner · Group overview (All Campuses)",rows:[
+  ["Fees received · October","Fee money actually received so far this month across all campuses. The bar shows how much of the billed amount that is."],
+  ["Expenses paid · October","What the school has paid out this month: staff salaries, vendors and other costs. The line below splits it into percentages."],
+  ["Net surplus (cash)","Fees received minus expenses paid. Green means the group is ahead, red means it is spending more than it received. ‘Cash’ means only money that has really moved."],
+  ["Fees still to receive","Money parents owe that has not arrived yet (this month's unpaid vouchers plus older arrears). The note under it is bills and salaries the school still has to pay."],
+  ["Campus comparison","One row per campus: students, fee collection, money to receive, attendance today, net surplus and a status. Click a row to open that campus."],
+  ["Status badge","Healthy, Watch or Needs attention. Needs attention means a deficit or less than 65% of fees collected. Watch means attendance under 90% or collection under 75%."],
+  ["Profit & loss · October so far","Income received, then salaries, vendors and other costs, ending in the net surplus or deficit. Cash basis, so money not yet received is listed separately underneath."],
+  ["Income vs expenses chart","Last six months side by side (blue is fees received, amber is expenses). The number under each month is the difference. October is the month so far."],
+  ["Needs your attention","Problems found automatically: campus running at a loss, low collection, unpaid salaries, low attendance, classes not marked, large vendor bills. Open jumps to that campus."],
+  ["Needs your approval","Requests waiting for the owner: fee concessions, fine waivers, leave, large expenses, vendor payments, payroll. Tick approves, cross declines."],
+  ["Staff today","Staff present against total, per campus, with how many are out."]]},
+ {h:"Branch Principal · one campus (the owner sees this too after clicking a campus)",rows:[
+  ["Four top cards","Fees received against billed, net surplus, fees still to receive, and today's attendance with how many classes have not been marked."],
+  ["Profit & loss","The same statement as the owner's, for this campus only."],
+  ["Classes needing attention","The six classes with the weakest attendance and fee collection together, so the principal knows where to start."],
+  ["Top defaulters","Students owing the most with two or more overdue months. The WhatsApp button sends a fee reminder."],
+  ["Today at school","Collected today, staff present and visitors on campus right now."],
+  ["Alerts","Urgent items for this campus: a loss, unpaid salaries, unmarked classes, absent staff, pending vendor bills, upcoming due date."]]},
+ {h:"Accounts clerk",rows:[
+  ["Collected today / October received","Cash and online money received today, and the month's total against what was billed."],
+  ["Total outstanding","Everything parents still owe, including older months. The note shows how many vouchers are overdue."],
+  ["October vouchers by status","Paid, Partial, Unpaid-not-yet-due and Overdue as a colour bar with counts. Open register goes straight to the vouchers."],
+  ["Last 7 days collection","Daily money received, one bar per day."],
+  ["Today by method","Cash, Bank, JazzCash, Easypaisa and 1Bill totals for today. This is what the cash drawer is checked against at day close."],
+  ["To do","Reminders: vouchers due on the 15th, close the day, vendor bills unpaid, October salaries."]]},
+ {h:"Front desk",rows:[["Four cards","Visitors on campus, students absent today, late arrivals and admission enquiries to follow up. Below are who is on campus now and the enquiries list."]]},
+ {h:"Teacher",rows:[
+  ["Class card","Their class, how many students, and whether attendance is marked. The big button marks it, or opens it to edit after submitting."],
+  ["My check-in","Teachers record their own arrival from here."],
+  ["Low attendance in my classes","Students in their classes under 85% attendance this month."],
+  ["My leave","Their leave requests and their status, with a button to apply."]]}
+ ]},
+
+{id:"students",title:"Students",path:"Left menu → Students",who:["Owner","Branch Principal","Accounts clerk","Front desk","Teacher"],lead:"The register of every enrolled student, with the family and money picture one click away.",
+ groups:[{h:"On the page",rows:[
+  ["Search and class filter","Find by name, father, roll number or phone. Results are paged 25 at a time."],
+  ["Dues column","What the student owes today, or ‘Clear’. Teachers do not see this column."],
+  ["‘sibling’ badge","Brothers and sisters are linked automatically by the guardian's phone number. The younger child gets the sibling discount."],
+  ["Student profile (click a row)","Attendance this month, dues, last exam, guardian, WhatsApp consent, the fee plan (tuition, transport, discounts and who approved them), the voucher history and any advance credit."],
+  ["+ New admission","Adds a student. A first voucher (admission fee plus tuition) is created automatically so the fee office sees it straight away."],
+  ["Import Excel","Shows the idea of bulk import. It is a demo message, no file is read."]]}]},
+
+{id:"fees",title:"Fees",path:"Left menu → Fees",who:["Owner","Branch Principal","Accounts clerk"],lead:"The heart of the product: bill every family each month, collect, chase and report. Money follows this order: Generate → Collect → Day close → Reports.",
+ groups:[
+ {h:"How a month flows",rows:[]},
+ {h:"Collect",rows:[
+  ["Find student","Type 2 or more letters of the student, father or phone. Brothers and sisters appear together."],
+  ["Open vouchers","Every unpaid voucher for that student, oldest first, with each charge, any fine, what is already paid and the balance."],
+  ["Late fine · waive","A flat fine is added after the due date. An accountant's waiver goes to the principal for approval; the principal or owner waives immediately."],
+  ["Amount received","Parents may pay in part. Payment goes to the oldest voucher first (arrears, then fine, then the current month). Any extra is kept as advance credit."],
+  ["Receive payment & print receipt","Records the payment, shows a receipt with exactly which voucher each rupee went to, and updates dashboards instantly."],
+  ["Today's desk","Receipts issued, cash in the drawer and bank or wallet money so far today."]]},
+ {h:"Vouchers",rows:[
+  ["Voucher register","Every voucher ever generated, searchable, filterable by month, class and status, and exportable to Excel."],
+  ["Status chips","Unpaid (not yet due), Partial, Overdue, Paid, Cancelled. Overdue means past the due date with a balance."],
+  ["Open a voucher","Shows the charges, payments against it and actions: Collect, Waive fine, Print, WhatsApp, Cancel (only if nothing was paid) and Reissue after a cancel."]]},
+ {h:"Generate",rows:[
+  ["Month, campus, class","Choose who the vouchers are for. The preview shows how many will be created and the total."],
+  ["Fee heads","Tuition always. Tick transport, annual charges, exam fee or add an extra charge such as a picnic fund. Sibling discounts and scholarships are applied automatically."],
+  ["Generate vouchers","Creates real vouchers in the register as Unpaid. Anyone who already has one for that month is skipped, so pressing twice never doubles up. Advance credit is applied automatically."],
+  ["Generation log","A record of every batch: when, which month, how many, how much. View jumps to those vouchers."]]},
+ {h:"Defaulters",rows:[
+  ["Ageing buckets","Students with overdue money split by how late: 1–30, 31–60 and 60+ days."],
+  ["Last reminded","When a WhatsApp fee reminder last went to that family."],
+  ["WhatsApp selected / all","Sends a fee reminder in Urdu and English to the ticked families, or to everyone in the list. Export to Excel for a call list."]]},
+ {h:"Day close",rows:[
+  ["Today's collection","Receipts and money received today split by cash, bank, JazzCash, Easypaisa and 1Bill."],
+  ["Cash counted in drawer","The clerk types what is really in the drawer. The screen shows the difference from what the system expects."],
+  ["Close day & send report","Locks the day and sends the summary to the principal. The owner sees each campus as Open or Closed."]]},
+ {h:"Reports",rows:[
+  ["Collection by day","Money received each day split by payment method, for any month."],
+  ["By class / By campus","Billed, received, outstanding and collection percentage per class, or per campus for the owner."],
+  ["Discounts & scholarships","How much was given away and to how many students, by type."],
+  ["Student ledger","Every charge and payment for one student in date order with a running balance. The answer to ‘why do I owe this?’"],
+  ["Export Excel","Every report downloads as a CSV that opens in Excel."]]},
+ {h:"Online payments",adv:true,rows:[
+  ["Paid online today / Auto-matched","Money that came in by bank, JazzCash, Easypaisa or 1Bill, and the share Taleem matched to a voucher by itself."],
+  ["Needs review","Money arrived but Taleem could not be sure which student it belongs to. Review lists the likely students with the reason (name in narration, payer is the father, same surname, amount matches). Pick one and Apply to mark the voucher paid, or Hold, or mark it for refund."],
+  ["Matched today","Payments already matched to a voucher automatically."]]},
+ {h:"Fee structure",rows:[
+  ["Monthly fee per class","Tuition, annual charges and exam fee for each class. Editable per campus, and Copy to all campuses is one click. Changes apply to vouchers created from then on."],
+  ["Fee heads","The kinds of charge the school bills: tuition, annual, admission, exam, transport, extras."],
+  ["Rules","Due date, flat late fine, sibling discount percentage, scholarship types and who approves what."]]}
+ ],
+ note:"Print and WhatsApp buttons on vouchers and receipts only show a confirmation message in this demo. Nothing is actually printed or sent."},
+
+{id:"attendance",title:"Attendance",path:"Left menu → Attendance",who:["Owner","Branch Principal","Front desk","Teacher"],lead:"Teachers mark their class each morning; parents of absent children get a WhatsApp straight away; the principal sees which classes are still unmarked.",
+ groups:[
+ {h:"Overview (principal, owner, front desk)",rows:[
+  ["Four top cards","Classes marked out of total, attendance today, absent students and parents notified."],
+  ["Class table","Every class with its class teacher, marked or not, and present, absent and late counts. For unmarked classes, Remind teacher sends them a WhatsApp."],
+  ["Owner view","One row per campus showing which classes are not marked. Open goes into that campus."]]},
+ {h:"Students (My class for a teacher)",rows:[
+  ["Mark buttons","P is present, A is absent, L is late. ‘All present’ fills the class in one tap, then change the exceptions."],
+  ["Submit attendance","Needs every child marked. If anyone is absent a preview of the Urdu and English message opens first, then Send. Submitting clears the class from the ‘not marked’ lists everywhere."],
+  ["Teachers","See only their own class. Others choose any class and section."]]},
+ {h:"Staff / My check-in",rows:[
+  ["Staff attendance","The front desk or principal marks present, absent or on leave for each staff member. Teachers can check in themselves."],
+  ["Effect","Present staff counts feed the dashboards and absent days feed payroll."]]},
+ {h:"Reports",rows:[
+  ["Monthly attendance","October attendance per class (or per campus for the owner), lowest first, exportable to Excel."],
+  ["Below 85%","Students whose attendance is a concern, with a WhatsApp button to the parent."]]}
+ ]},
+
+{id:"exams",title:"Exams & Results",path:"Left menu → Exams & Results",who:["Owner","Branch Principal","Teacher"],lead:"Type marks once. Totals, grades, positions and report cards follow. Results only reach parents when the principal publishes.",
+ groups:[
+ {h:"The flow",rows:[]},
+ {h:"Marks entry",rows:[
+  ["Marks grid","One row per student, one box per subject. Anything under the 40% pass mark turns red. Totals, grade and position update as you type."],
+  ["Class average row","The average of each subject for the class."],
+  ["Report card","A printable card per student with subject marks, grade, position in class, attendance and remarks."],
+  ["Status badge and buttons","Draft, Submitted or Published. A teacher presses Submit to principal. The principal can Publish, Return to teacher, Unlock for changes or Publish all submitted."],
+  ["Publishing","Locks the sheet and records a message to those parents."]]},
+ {h:"Results & analysis",rows:[
+  ["Campus average and pass rate","Average percentage and the share of students who passed every subject."],
+  ["By class table","Average, pass rate, class teacher, status and topper for every class. Click a class to open its marks."],
+  ["Subject averages","Which subjects the campus is strongest and weakest in."],
+  ["Top 5 / Need support","The best students, and students failing two or more subjects with a button to call the parent."],
+  ["Owner view","Campus against campus: average, pass rate and classes published."]]},
+ {h:"Datesheet",rows:[["Final 2026","The exam timetable. Publish to parents sends it to everyone in the campus."]]}
+ ]},
+
+{id:"messages",title:"Messages & Diary",path:"Left menu → Messages & Diary",who:["Owner","Branch Principal","Front desk","Teacher"],lead:"One compose box that reaches parents on the app, WhatsApp and SMS. What you can send depends on who you are.",
+ groups:[
+ {h:"Compose",rows:[
+  ["Type","Notice, Homework / diary, Fee reminder or Emergency. Each fills in a ready message. Teachers get Notice and Homework; only the owner and principal can send Emergency."],
+  ["To","Real groups with real parent counts (brothers and sisters count once). Teachers see only their own class; principals see the campus, any class, defaulters or van students; the owner sees all campuses."],
+  ["Message","Placeholders like {student}, {father} and {amount} are filled in separately for each parent."],
+  ["WhatsApp preview","Exactly what parents will see."],
+  ["Send via / When","Parent app and WhatsApp always; SMS fallback and scheduling in Advanced I."],
+  ["Fee reminder type","Also records that those families were reminded, so the Defaulters tab shows the date."]]},
+ {h:"Sent",rows:[["Sent list","Every message with type, audience, channels, delivered and read counts and who sent it. Click one for the full text. Advanced I also shows each parent's status, with SMS to the undelivered and a nudge to those who have not read it."]]},
+ {h:"Automatic messages",rows:[["Automatic list","Messages the system sent itself: absent alerts, fee reminders, pickup confirmations, result notices."]]},
+ {h:"Templates",rows:[["Templates","The wording of automatic messages. Editing one sends it for WhatsApp re-approval, as in real life, and the old text keeps working meanwhile."]]},
+ {h:"Parent chat",adv:true,rows:[["Conversations","Parents message the class teacher inside the app, so no personal phone numbers are shared. Open a conversation and reply."]]}
+ ]},
+
+{id:"gate",title:"Gate & Visitors",path:"Left menu → Gate & Visitors",who:["Owner","Branch Principal","Front desk"],lead:"Safe pickup and a visitor log for the gate guard's tablet.",
+ groups:[
+ {h:"Child pickup",rows:[
+  ["Search / scan","Find the child by name, roll number or father. The card shows class and roll number."],
+  ["Who is collecting?","The authorised people for that child (father, an uncle, the school van driver) and an option for someone not on the list."],
+  ["Release child","Records the pickup and sends the parent a confirmation. An unlisted person triggers a one-time code to the parent on WhatsApp; the guard cannot release without it."],
+  ["Released today","Who left, with whom and when."]]},
+ {h:"Visitors",rows:[["Visitor log","Who came, why, who they are meeting, in and out times. Check in & print badge adds a visitor; Check out closes the visit."]]},
+ {h:"Late arrivals",rows:[["Late list","Students marked late today by their teachers."]]}
+ ],note:"The campus selector must be on one campus here. With All Campuses selected the page asks you to choose."},
+
+{id:"staff",title:"Staff & Payroll",path:"Left menu → Staff & Payroll",who:["Owner","Branch Principal","Accounts clerk"],lead:"Everyone who works at the school, what they are paid, and who can log in. Teachers never see this page.",
+ groups:[
+ {h:"Staff",rows:[
+  ["Cards","Active staff, teachers, monthly payroll and how many are disabled or former."],
+  ["Role and status filters","Teachers, accounts and admin, front desk, support. Active, Disabled and Former staff are separate lists."],
+  ["+ Add staff","Creates the person with role, campus, salary, phone and joining date, optionally the class they teach. A WhatsApp login invite goes out."],
+  ["Edit","Change salary, role, class teacher assignment or phone."],
+  ["Disable","Blocks their login and takes them off attendance sheets and the next payroll. Reversible. If they were a class teacher the class shows ‘vacant’. Enable restores everything."],
+  ["Remove","Moves them to Former staff with a reason and last working day. History, salary records and payslips stay. Final settlement is salary for days worked minus any advance."],
+  ["Who can manage","Only the owner and principal. Accountants see salaries but cannot change staff."]]},
+ {h:"Payroll – Oct 2026",rows:[
+  ["Cards","Net payable, advances recovered and absence deductions."],
+  ["Staff table","Basic salary, absent days (from staff attendance), advance taken and net pay. Payslip opens one."],
+  ["Status","Draft, then Awaiting approval, Approved, Paid. An accountant submits to the principal; the principal approves; then it is marked paid and a bank transfer file is exported."],
+  ["Owner view","Payroll for each campus with its status."]]},
+ {h:"Leave & cover",adv:true,rows:[["Leave requests","Teachers apply from the app. The principal approves or rejects and a free teacher is suggested as cover. Unpaid leave comes off salary automatically."]]}
+ ],note:"Salaries and the profit and loss are linked: disabling a teacher lowers the campus payroll and raises the net surplus."},
+
+{id:"vendors",title:"Vendors & Expenses",path:"Left menu → Vendors & Expenses",who:["Owner","Branch Principal","Accounts clerk"],lead:"Everything the school buys and pays for. Every payment here changes the profit and loss.",
+ groups:[
+ {h:"Vendors",rows:[
+  ["Payable / Paid this month","What the campus owes vendors, and what it has paid this month."],
+  ["Pay","Records a payment. Above Rs 50,000 an accountant's payment goes to the principal for approval first."],
+  ["+ Add vendor","Adds a supplier with category and phone."]]},
+ {h:"Expenses",rows:[
+  ["Recent expenses","Costs recorded this month with their status: Paid, Pending approval or Rejected."],
+  ["Add expense","Saving counts it as a cost straight away. An accountant's expense above Rs 25,000 waits for the principal's approval."]]},
+ {h:"Purchase orders",adv:true,rows:[["Purchase orders","Raise an order, the vendor confirms on WhatsApp, the gate receives the delivery and the invoice matches. Sample data only."]]}
+ ]},
+
+{id:"adm",title:"Admissions CRM",path:"Left menu → Admissions CRM",who:["Owner","Front desk"],adv:true,lead:"Track each new-student enquiry from first contact to enrolment.",
+ groups:[{h:"On the page",rows:[
+  ["Board","Four columns: Inquiry, Test, Offered, Admitted. Each card is a family with phone and where they came from (Facebook, walk-in, referral)."],
+  ["Move to next stage","Advances the child and sends the parent a WhatsApp follow-up. Admitted creates the student record."]]}],
+ note:"Sample data only. This board is not connected to the students list or the fee vouchers yet."},
+
+{id:"transport",title:"Transport",path:"Left menu → Transport",who:["Owner","Branch Principal","Accounts clerk","Front desk"],adv:true,lead:"Routes, vans and drivers. In Basic, transport is just a monthly fee on the voucher; Advanced adds the operations.",
+ groups:[{h:"On the page",rows:[
+  ["Routes","Each route with van, driver, number of students, fee and whether it is on time or late."],
+  ["Live map","Where a van is now and when it will arrive. Parents get the same view and an alert when the van is five minutes away."]]}],
+ note:"Sample data only. Route numbers are not connected to the students list."},
+
+{id:"campuses",title:"Campuses",path:"Left menu → Campuses (owner only)",who:["Owner"],adv:true,lead:"All five campuses on one table so the owner can compare them.",
+ groups:[{h:"On the page",rows:[
+  ["Campus table","Principal, students, staff, fee collection, money to receive, attendance, net surplus and status for each campus, with a group total row."],
+  ["Open","Jumps to that campus's dashboard."]]}]},
+
+{id:"settings",title:"Settings & Roles",path:"Left menu → Settings & Roles (owner only)",who:["Owner"],lead:"Who can see and do what, who has a login, and how the system behaves.",
+ groups:[
+ {h:"Tabs",rows:[
+  ["Roles & permissions","A table of 18 actions against six roles: Owner, Branch principal, Accountant, Teacher, Front desk and Guard. Advanced I adds custom roles, approval limits and an audit log."],
+  ["Users & logins","How many logins each campus has by role and how many are blocked. Manage staff takes you to the staff list."],
+  ["Notifications","Which automatic messages go out, when and on which channel."],
+  ["Data & backup","Last cloud backup, a full export button and what works offline."]]}]}
+];
+
+var GLOSS = [
+ ["Voucher","The monthly fee bill for one student, listing every charge. Each has a number like V2610-0001."],
+ ["Arrears","Fees from earlier months that are still unpaid."],
+ ["Late fine","A flat Rs 200 added to a voucher once its due date (the 15th) has passed unpaid."],
+ ["Concession / scholarship","A percentage taken off tuition: Merit 25%, Staff child 50%, Need-based 30%. Needs approval."],
+ ["Sibling discount","10% off tuition for the younger of two brothers or sisters."],
+ ["Advance credit","Extra money a parent paid, kept on the student and used against the next voucher."],
+ ["Cash basis","The profit and loss counts only money that has actually moved, not bills not yet paid. Unpaid bills are shown beside it."],
+ ["Net surplus","Fees received minus expenses paid. The school's profit for the month so far."],
+ ["Collection %","Share of this month's billed fees already received."],
+ ["Reconciliation","Matching money that arrived in the bank or wallet to the right student's voucher."],
+ ["Class teacher","The teacher responsible for one class and section, who marks its attendance and enters its marks."],
+ ["Cover","A free teacher who takes a class when its teacher is on leave."]
+];
+
+var FAQ = [
+ ["How do we bill a whole school in one go?","Fees → Generate → choose the month, campus and heads → Generate vouchers. It takes seconds and skips anyone already billed."],
+ ["What if a parent pays only part?","Collect accepts any amount. It goes to the oldest voucher first and the rest of the balance stays open and visible."],
+ ["What if a parent pays too much?","The extra is kept as advance credit and is used automatically on the next voucher."],
+ ["Who can waive a late fine?","The principal or owner, immediately. An accountant can ask and the request appears in the principal's approvals."],
+ ["How does a bank transfer with no name get matched?","Fees → Online payments → Needs review. Taleem suggests students by name in the narration, payer name and amount, and you pick one."],
+ ["Can the owner see every campus together?","Yes, on the owner's Group overview, the Campuses page and the Fees reports ‘By campus’. This is an Advanced I feature."],
+ ["Can teachers see fees or salaries?","No. Teachers do not see the Fees, Staff & Payroll or Vendors pages, and the Students list hides the dues column for them."],
+ ["What happens when someone leaves the school staff?","Disable stops their login and payroll but can be undone. Remove moves them to Former staff and keeps the records."],
+ ["How do parents know their child was absent?","When the teacher submits attendance a WhatsApp goes out in Urdu and English, at once."],
+ ["Does it work in Urdu?","Yes, the whole screen switches to Urdu and flips right to left. Names and amounts stay in English."],
+ ["What if the internet goes down?","Attendance and the fee desk keep working offline and sync when the connection returns (see Settings → Data & backup)."]
+];
+
+var CAUTION = [
+ "Print buttons and the WhatsApp buttons (on vouchers, receipts, reminders and report cards) only show a confirmation message. Nothing is printed or sent.",
+ "Import Excel, ID card and Download PDF are the same: they show a message only. Excel export on the reports does download a real file.",
+ "Admissions CRM and Transport use sample data that is not connected to the students list or fees.",
+ "The phone app mockup is separate and still shows older sample data. Use the web demo.",
+ "Reload the page to reset. Anything you add or change is lost on reload.",
+ "The Urdu text has not yet been checked by a native speaker."
+];
+
+/* ---- rendering -------------------------------------------------------------- */
+var main = document.getElementById('main'), toc = document.getElementById('toc'), q = document.getElementById('q'), count = document.getElementById('count');
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function hl(s,t){s=esc(s);if(!t)return s;var re=new RegExp('('+t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig');return s.replace(re,'<mark>$1</mark>')}
+function has(s,t){return !t||String(s).toLowerCase().indexOf(t)>-1}
+
+function flowHtml(id){
+  var steps = id==='fees'?['Generate vouchers','Parents pay (cash, bank, wallet)','Collect or auto-match','Day close','Reports and dashboards']
+    : id==='exams'?['Teacher enters marks','Submit to principal','Principal publishes','Parents are notified']:null;
+  if(!steps)return '';
+  return '<div class="flow">'+steps.map(function(s,i){return (i?'<span class="a">→</span>':'')+'<span class="s">'+esc(s)+'</span>'}).join('')+'</div>';
+}
+
+function render(){
+  var t = q.value.trim().toLowerCase(), html = '', tocHtml = '', shown = 0, hits = 0;
+  PAGES.forEach(function(p){
+    var pageMatch = has(p.title,t)||has(p.path,t)||has(p.lead,t);
+    var gs = p.groups.map(function(g){
+      var gm = has(g.h,t);
+      var rows = g.rows.filter(function(r){return !t||pageMatch&&false||gm||has(r[0],t)||has(r[1],t)});
+      return {h:g.h,rows:rows,keepEmpty:!t&&g.rows.length===0,adv:g.adv};
+    }).filter(function(g){return g.rows.length||g.keepEmpty});
+    var extraMatch = t && p.note && has(p.note,t);
+    if(t && !gs.length && !pageMatch && !extraMatch) return;
+    if(t && !gs.length && pageMatch){ gs = p.groups.map(function(g){return {h:g.h,rows:g.rows,keepEmpty:false,adv:g.adv}}).filter(function(g){return g.rows.length}); }
+    shown++; tocHtml += '<a href="#'+p.id+'">'+esc(p.title)+'</a>';
+    var h = '<section class="page" id="'+p.id+'"><h2>'+hl(p.title,t)+(p.adv?' <span class="tag adv">Advanced I</span>':'')+'</h2><p class="path">'+hl(p.path,t)+'</p>';
+    if(p.who.length) h += '<div class="who">'+p.who.map(function(w){return '<span class="tag">'+esc(w)+'</span>'}).join('')+'</div>';
+    h += '<p class="lead">'+hl(p.lead,t)+'</p>' + flowHtml(p.id);
+    gs.forEach(function(g){
+      if(g.rows.length){
+        h += '<h3>'+hl(g.h,t)+(g.adv?' <span class="tag adv">Advanced I</span>':'')+'</h3><dl>';
+        g.rows.forEach(function(r){hits++;h += '<dt>'+hl(r[0],t)+'</dt><dd>'+hl(r[1],t)+'</dd>'});
+        h += '</dl>';
+      }
+    });
+    if(p.note) h += '<div class="note"><b>Heads up:</b> '+hl(p.note,t)+'</div>';
+    html += h+'</section>';
+  });
+  /* glossary, faq and cautions */
+  var gl = GLOSS.filter(function(r){return has(r[0],t)||has(r[1],t)}), fq = FAQ.filter(function(r){return has(r[0],t)||has(r[1],t)}), ct = CAUTION.filter(function(c){return has(c,t)});
+  if(gl.length){shown++;tocHtml+='<a href="#glossary">Plain-English terms</a>';html+='<section class="page" id="glossary"><h2>Plain-English terms</h2><p class="lead">The words customers will hear most in the demo.</p><dl>'+gl.map(function(r){hits++;return '<dt>'+hl(r[0],t)+'</dt><dd>'+hl(r[1],t)+'</dd>'}).join('')+'</dl></section>'}
+  if(fq.length){shown++;tocHtml+='<a href="#faq">Likely questions</a>';html+='<section class="page" id="faq"><h2>Likely questions</h2><p class="lead">What accountants and principals tend to ask, with a short answer you can give.</p>'+fq.map(function(r){hits++;return '<details'+(t?' open':'')+'><summary>'+hl(r[0],t)+'</summary><p>'+hl(r[1],t)+'</p></details>'}).join('')+'</section>'}
+  if(ct.length){shown++;tocHtml+='<a href="#careful">What not to click</a>';html+='<section class="page" id="careful"><h2>What not to click</h2><p class="lead">Things that look real but are not wired up yet. Avoid these in front of customers, or call them ‘coming next’.</p><div class="note">'+ct.map(function(c){hits++;return '<div>• '+hl(c,t)+'</div>'}).join('')+'</div></section>'}
+  main.innerHTML = html || '<div class="empty">Nothing matches “'+esc(q.value)+'”. Try a shorter word, like ‘fee’ or ‘voucher’.</div>';
+  toc.innerHTML = tocHtml;
+  count.textContent = t ? hits+' match'+(hits===1?'':'es')+' in '+shown+' section'+(shown===1?'':'s') : '';
+}
+q.addEventListener('input',render);
+render();
+</script>
+</body></html>
